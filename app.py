@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (Supabase DB 연동 버전)
 ================================================================================
-실행 방법:
-    pip install streamlit pandas plotly
-    streamlit run app.py
 """
 
 import os
@@ -18,9 +15,21 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 import streamlit.components.v1 as components
+from supabase import create_client, Client
 
 # =========================================================
-# 0. 페이지 설정 & 블루톤 UI Design System
+# 0. Supabase DB 연결 설정
+# =========================================================
+@st.cache_resource
+def init_supabase():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase: Client = init_supabase()
+
+# =========================================================
+# 0-1. 페이지 설정 & 블루톤 UI Design System
 # =========================================================
 st.set_page_config(
     page_title="PT Account — 김준수 트레이너",
@@ -102,15 +111,8 @@ def rerun():
 
 
 # =========================================================
-# 1. 파일 경로 & 스키마 & 템플릿
+# 1. 컬럼 정의 & 템플릿
 # =========================================================
-MEMBERS_CSV = "members.csv"
-LOGS_CSV = "logs.csv"
-INBODY_CSV = "inbody.csv"
-SALES_CSV = "sales.csv"
-REPORTS_CSV = "reports.csv"
-BOOKINGS_CSV = "bookings.csv"
-
 MEMBERS_COLUMNS = [
     "member_id", "name", "contact", "birth_date", "reg_date",
     "total_sessions", "remaining_sessions", "trainer", "status",
@@ -259,75 +261,50 @@ def refine_raw_text(text):
 
 
 # =========================================================
-# 2. 데이터 관리 함수
+# 2. Supabase DB 전용 데이터 관리 함수
 # =========================================================
-def _seed_sample_data():
-    today = date.today()
-    members = pd.DataFrame([
-        {
-            "member_id": 1, "name": "민대은", "contact": "010-5785-1234",
-            "birth_date": "1993-08-20", "reg_date": (today - timedelta(days=20)).isoformat(),
-            "total_sessions": 10, "remaining_sessions": 2, "trainer": MY_NAME,
-            "status": "Active", "goal": "가동 범위 해방 및 근력 자립", "session_price": 70000,
-            "branch": "프리랜서", "gender": "남성", "age": 33,
-            "tr_expect": "높음", "re_status": "결제완료", "week_group": "1주차",
-            "memo": "무릎 통증 이력 있음 - 스쿼트 시 깊이 주의", "survey_json": "{}",
-            "exp_re_sessions": 10, "exp_re_price": 70000, "is_exp_configured": 1
-        }
-    ])
-    sales = pd.DataFrame([
-        {"sale_id": 1, "member_id": 1, "date": today.replace(day=2).isoformat(), "product_name": "PT 10회 등록", "amount": 700000, "pay_type": "카드"},
-    ])
-    reports = pd.DataFrame(columns=REPORTS_COLUMNS)
-    logs = pd.DataFrame(columns=LOGS_COLUMNS)
-    bookings = pd.DataFrame(columns=BOOKINGS_COLUMNS)
-    inbody = pd.DataFrame(columns=INBODY_COLUMNS)
+def load_data(table_name, columns):
+    try:
+        response = supabase.table(table_name).select("*").execute()
+        df = pd.DataFrame(response.data)
+        if df.empty:
+            return pd.DataFrame(columns=columns)
+        for col in columns:
+            if col not in df.columns: df[col] = None
+            
+        str_cols = ["name", "contact", "memo", "survey_json", "goal", "tr_expect", "re_status", "week_group"]
+        for sc in str_cols:
+            if sc in df.columns:
+                df[sc] = df[sc].fillna("").astype(str)
+                
+        return df[columns]
+    except Exception:
+        return pd.DataFrame(columns=columns)
 
-    members.to_csv(MEMBERS_CSV, index=False)
-    sales.to_csv(SALES_CSV, index=False)
-    reports.to_csv(REPORTS_CSV, index=False)
-    logs.to_csv(LOGS_CSV, index=False)
-    bookings.to_csv(BOOKINGS_CSV, index=False)
-    inbody.to_csv(INBODY_CSV, index=False)
+def load_members(): return load_data("members", MEMBERS_COLUMNS)
+def load_logs(): return load_data("logs", LOGS_COLUMNS)
+def load_inbody(): return load_data("inbody", INBODY_COLUMNS)
+def load_sales(): return load_data("sales", SALES_COLUMNS)
+def load_reports(): return load_data("reports", REPORTS_COLUMNS)
+def load_bookings(): return load_data("bookings", BOOKINGS_COLUMNS)
 
+def save_data(table_name, df):
+    if df.empty: return
+    data = df.to_dict(orient="records")
+    for row in data:
+        # NaN / None 값 정리
+        clean_row = {k: (None if pd.isna(v) else v) for k, v in row.items()}
+        supabase.table(table_name).upsert(clean_row).execute()
+
+def save_members(df): save_data("members", df)
+def save_logs(df): save_data("logs", df)
+def save_inbody(df): save_data("inbody", df)
+def save_sales(df): save_data("sales", df)
+def save_reports(df): save_data("reports", df)
+def save_bookings(df): save_data("bookings", df)
 
 def init_all_files():
-    if not (os.path.exists(MEMBERS_CSV) and os.path.exists(REPORTS_CSV)):
-        _seed_sample_data()
-    if not os.path.exists(BOOKINGS_CSV):
-        pd.DataFrame(columns=BOOKINGS_COLUMNS).to_csv(BOOKINGS_CSV, index=False)
-    if not os.path.exists(INBODY_CSV):
-        pd.DataFrame(columns=INBODY_COLUMNS).to_csv(INBODY_CSV, index=False)
-
-
-def _load_csv(path, columns):
-    try:
-        df = pd.read_csv(path)
-    except Exception:
-        df = pd.DataFrame(columns=columns)
-    for col in columns:
-        if col not in df.columns: df[col] = None
-        
-    str_cols = ["name", "contact", "memo", "survey_json", "goal", "tr_expect", "re_status", "week_group"]
-    for sc in str_cols:
-        if sc in df.columns:
-            df[sc] = df[sc].fillna("").astype(str)
-            
-    return df[columns]
-
-def load_members(): return _load_csv(MEMBERS_CSV, MEMBERS_COLUMNS)
-def load_logs(): return _load_csv(LOGS_CSV, LOGS_COLUMNS)
-def load_inbody(): return _load_csv(INBODY_CSV, INBODY_COLUMNS)
-def load_sales(): return _load_csv(SALES_CSV, SALES_COLUMNS)
-def load_reports(): return _load_csv(REPORTS_CSV, REPORTS_COLUMNS)
-def load_bookings(): return _load_csv(BOOKINGS_CSV, BOOKINGS_COLUMNS)
-
-def save_members(df): df.to_csv(MEMBERS_CSV, index=False)
-def save_logs(df): df.to_csv(LOGS_CSV, index=False)
-def save_inbody(df): df.to_csv(INBODY_CSV, index=False)
-def save_sales(df): df.to_csv(SALES_CSV, index=False)
-def save_reports(df): df.to_csv(REPORTS_CSV, index=False)
-def save_bookings(df): df.to_csv(BOOKINGS_CSV, index=False)
+    pass
 
 def next_id(df, id_col):
     if df.empty: return 1
@@ -849,7 +826,7 @@ def page_booking(members, bookings):
 
 
 # =========================================================
-# 6. 페이지: 주차별 재등록 현황 (이탈시 0원 & 수동 설정 전용)
+# 6. 페이지: 주차별 재등록 현황
 # =========================================================
 def page_re_registration(members, sales):
     st.title("🎯 주차별 재등록 현황 및 매출 예측 뷰어")
@@ -873,7 +850,6 @@ def page_re_registration(members, sales):
             re_st = str(sm.get("re_status", "")).strip()
             is_cfg = bool(safe_int(sm.get("is_exp_configured"), 0) == 1)
 
-            # 이탈자이거나 수동가 작성을 안 한 경우 무조건 0원 처리
             if tr_exp in ["이탈", "낮음"] or re_st in ["이탈", "전월이탈"] or not is_cfg:
                 calc_amt = 0
             else:
@@ -993,7 +969,6 @@ def page_re_registration(members, sales):
         curr_exp_price = safe_int(m.get("exp_re_price"), safe_int(m.get("session_price"), 70000))
         if curr_exp_price <= 0: curr_exp_price = 70000
 
-        # 이탈 처리 또는 수동가 설정을 하지 않은 경우 미표시 및 0원
         if tr_exp_val in ["이탈", "낮음"] or re_st_val in ["이탈", "전월이탈"] or not is_cfg:
             calc_exp_amount = 0
             exp_text_disp = "<span style='color:#94A3B8;'>(예상가 수동 미설정 또는 이탈)</span>"
@@ -1038,7 +1013,6 @@ def page_re_registration(members, sales):
             ec3.write("")
             ec3.write("")
             if ec3.button("예상가 설정 저장", key=f"cfg_exp_save_{m_id}", type="primary", use_container_width=True):
-                # 정수값 1 저장을 통한 판다스 안전 대입
                 members.loc[members["member_id"] == m_id, "exp_re_sessions"] = new_exp_s
                 members.loc[members["member_id"] == m_id, "exp_re_price"] = new_exp_p
                 members.loc[members["member_id"] == m_id, "is_exp_configured"] = 1
@@ -1139,8 +1113,7 @@ def page_bodyplan(members, reports):
             st.session_state["show_modal"] = False
             rerun()
         if btn_c2.button("🔄 다시 작성하기", use_container_width=True):
-            reports = reports[reports["member_id"] != m_id]
-            save_reports(reports)
+            supabase.table("reports").delete().eq("member_id", int(m_id)).execute()
             st.session_state["editing_member_id"] = m_id
             st.session_state["show_modal"] = False
             rerun()
@@ -1237,7 +1210,7 @@ def page_bodyplan(members, reports):
             else:
                 new_r_id = next_id(reports, "report_id")
                 new_rep = {
-                    "report_id": new_r_id, "member_id": selected_m["member_id"],
+                    "report_id": new_r_id, "member_id": int(selected_m["member_id"]),
                     "date": date.today().isoformat(),
                     "goal_text": goal_input,
                     "analysis_text": analysis,
@@ -1267,7 +1240,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 (수업 피드백 정제 로직 개선)
+# 8. 페이지: 수업일지 작성
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1348,7 +1321,7 @@ def page_journal(members, logs):
             rpe_avg = pd.to_numeric(valid_rows["RPE"], errors="coerce").mean() if not valid_rows.empty else 7.0
 
             new_log = {
-                "log_id": next_id(logs, "log_id"), "member_id": member["member_id"], "date": log_date.isoformat(),
+                "log_id": next_id(logs, "log_id"), "member_id": int(member["member_id"]), "date": log_date.isoformat(),
                 "start_time": start_time_sel, "end_time": end_time_sel,
                 "exercises_json": valid_rows.to_json(orient="records", force_ascii=False),
                 "good_points": good_points, "improve_points": improve_points,
@@ -1501,21 +1474,10 @@ def page_members(members, sales, bookings, logs, reports):
             with c_del:
                 st.write("")
                 if st.button("🗑️", key=f"btn_del_mem_{m_id}_{idx}", use_container_width=True):
-                    members = members[members["member_id"] != m_id]
-                    bookings = bookings[bookings["member_id"] != m_id]
-                    logs = logs[logs["member_id"] != m_id]
-                    reports = reports[reports["member_id"] != m_id]
-                    sales = sales[sales["member_id"] != m_id]
-
-                    save_members(members)
-                    save_bookings(bookings)
-                    save_logs(logs)
-                    save_reports(reports)
-                    save_sales(sales)
-
+                    supabase.table("members").delete().eq("member_id", int(m_id)).execute()
                     if memo_open_id == m_id:
                         st.session_state["memo_open_id"] = None
-                    st.toast(f"'{m['name']}' 회원의 모든 데이터가 완벽 삭제되었습니다.")
+                    st.toast(f"'{m['name']}' 회원의 데이터가 완벽 삭제되었습니다.")
                     rerun()
 
             if re_pay_open_id == m_id:
@@ -1539,7 +1501,7 @@ def page_members(members, sales, bookings, logs, reports):
 
                     new_s = {
                         "sale_id": next_id(sales, "sale_id"),
-                        "member_id": m_id,
+                        "member_id": int(m_id),
                         "date": date.today().isoformat(),
                         "product_name": f"PT {re_sess}회 재등록",
                         "amount": tot_re_amount,
@@ -1646,8 +1608,7 @@ def page_members(members, sales, bookings, logs, reports):
                 
                 with col_s3:
                     if st.button("🗑️ 삭제", key=f"btn_del_sale_{sale_id}_{idx}", use_container_width=True):
-                        sales = sales[sales["sale_id"] != sale_id]
-                        save_sales(sales)
+                        supabase.table("sales").delete().eq("sale_id", int(sale_id)).execute()
                         st.toast("해당 매출 내역이 삭제되었습니다.")
                         rerun()
 
@@ -1655,7 +1616,7 @@ def page_members(members, sales, bookings, logs, reports):
 
 
 # =========================================================
-# 10. 신규 페이지: 인바디 체성분 관리
+# 10. 인바디 체성분 관리
 # =========================================================
 def page_inbody(members, inbody):
     st.title("📉 인바디(InBody) 체성분 기록 & 변화 분석")
@@ -1683,7 +1644,7 @@ def page_inbody(members, inbody):
     if ic5.button("💾 기록 저장", type="primary", use_container_width=True, key=f"in_save_{m_id}"):
         new_rec = {
             "record_id": next_id(inbody, "record_id"),
-            "member_id": m_id,
+            "member_id": int(m_id),
             "date": in_date.isoformat(),
             "weight": in_weight,
             "skeletal_muscle": in_muscle,
@@ -1696,7 +1657,6 @@ def page_inbody(members, inbody):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 회원 인바디 이력 조회 및 그래프
     m_inbody = inbody[inbody["member_id"] == m_id].sort_values("date")
 
     if m_inbody.empty:
@@ -1732,8 +1692,7 @@ def page_inbody(members, inbody):
             """, unsafe_allow_html=True)
             
             if st.button("🗑️ 기록 삭제", key=f"del_ib_{rec_id}_{idx_ib}"):
-                inbody = inbody[inbody["record_id"] != rec_id]
-                save_inbody(inbody)
+                supabase.table("inbody").delete().eq("record_id", int(rec_id)).execute()
                 st.toast("체성분 기록이 삭제되었습니다.")
                 rerun()
 
@@ -1741,7 +1700,7 @@ def page_inbody(members, inbody):
 
 
 # =========================================================
-# 11. 메인 라우팅 (인바디 메뉴 추가)
+# 11. 메인 라우팅
 # =========================================================
 def main():
     init_all_files()
