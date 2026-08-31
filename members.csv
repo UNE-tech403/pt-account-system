@@ -1,0 +1,3 @@
+member_id,name,contact,birth_date,reg_date,total_sessions,remaining_sessions,trainer,status,goal,session_price,branch,gender,age,tr_expect,re_status,week_group,memo,survey_json,exp_re_sessions,exp_re_price,is_exp_configured
+2,박희주,1024631040,1995-01-01,2026-08-31,10,10,김준수,Active,다이어트 및 체형교정,70000,개인 PT,남성,28,높음,결제예정,6주차,,{},10,70000,1.0
+3,grivin,1024631040,1995-01-01,2026-08-31,10,10,김준수,Active,다이어트 및 체형교정,70000,개인 PT,남성,28,확인중,미지정,6주차,,{},10,70000,0.0

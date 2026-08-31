@@ -1,0 +1,3 @@
+sale_id,member_id,date,product_name,amount,pay_type
+2,2,2026-08-31,PT 10회,700000,카드
+3,3,2026-08-31,PT 10회,700000,카드
