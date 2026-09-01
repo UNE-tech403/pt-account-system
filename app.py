@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (현재 시각 기반 시간대/달력 정밀 자동 동기화 반영)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (매출 동기화 & 실시간 시간대 엄격 필터링 적용)
 ================================================================================
 """
 
@@ -789,10 +789,10 @@ def page_dashboard(members, logs, sales, reports, bookings):
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("#### 📅 수업 일정 달력 및 일별 출석/결석 스케줄")
 
-    # [수정 2 반영] 달력 기본 연/월/날짜를 항상 현재 시점(오늘)으로 자동 유지
+    # 달력 기본 연/월/날짜 동기화
     st.session_state["dash_cal_year"] = today.year
     st.session_state["dash_cal_month"] = today.month
-    if "dash_selected_date" not in st.session_state:
+    if "dash_selected_date" not in st.session_state or st.session_state["dash_selected_date"] < today.isoformat():
         st.session_state["dash_selected_date"] = today.isoformat()
 
     c_cal, c_detail = st.columns([1.1, 1.2])
@@ -935,16 +935,17 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (현재 시각 기준 완벽 필터링 적용)
+# 5. 페이지: 수업 등록 (현재 시간 기준 지난 시간대 완벽 제거)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
 
     today = date.today()
-    # [수정 2 반영] 오늘 날짜/연/월 기준으로 자동 동기화
     st.session_state["cal_year"] = today.year
     st.session_state["cal_month"] = today.month
-    if "selected_cal_date" not in st.session_state:
+    
+    # [수정 2] 선택 날짜가 없거나 지나간 날짜라면 오늘 날짜로 자동 동기화
+    if "selected_cal_date" not in st.session_state or st.session_state["selected_cal_date"] < today.isoformat():
         st.session_state["selected_cal_date"] = today.isoformat()
 
     year = st.session_state["cal_year"]
@@ -1041,18 +1042,17 @@ def page_booking(members, bookings):
         st.markdown("---")
         st.markdown("##### ➕ 신규 수업 예약 등록")
 
-        # [수정 1 반영] 현재 시각 기준 이미 지난 정시 시간대(ex. 07:42 -> 06:00, 07:00 제외) 제외 로직
+        # [수정 1] 현재 '시(Hour)' 기준 지나버린 모든 시간대 엄격 제외
         now_dt = datetime.now()
         today_str = date.today().isoformat()
         
         valid_slots = []
         for slot in TIME_SLOTS:
             sh, sm = map(int, slot.split(":"))
-            slot_start_dt = datetime.strptime(sel_date, "%Y-%m-%d").replace(hour=sh, minute=sm)
             
             if sel_date == today_str:
-                # 수업 시작 시간 정시 기준 이미 지난 시점은 제외
-                if slot_start_dt > now_dt:
+                # 현재 시각의 Hour보다 큰 정시 시간대만 노출 (ex: 08:21 -> sh > 8 인 09:00부터 허용)
+                if sh > now_dt.hour:
                     valid_slots.append(slot)
             elif sel_date > today_str:
                 valid_slots.append(slot)
@@ -1633,7 +1633,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리
+# 9. 페이지: 회원 관리 (신규 등록 시 즉시 매출 반영 보완)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1692,6 +1692,7 @@ def page_members(members, sales, bookings, logs, reports):
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         save_members(members)
 
+                        # [문제 1 해결] 매출 데이터 생성 후 세션 스토리지 및 DB에 일괄 동기화
                         new_s = {
                             "sale_id": next_id(sales, "sale_id"), 
                             "member_id": new_m_id, 
@@ -1700,11 +1701,11 @@ def page_members(members, sales, bookings, logs, reports):
                             "amount": amount, 
                             "pay_type": pay_type
                         }
-                        sales = pd.concat([sales, pd.DataFrame([new_s])], ignore_index=True)
-                        save_sales(sales)
+                        updated_sales = pd.concat([sales, pd.DataFrame([new_s])], ignore_index=True)
+                        save_sales(updated_sales)
 
                         st.session_state["show_reg_modal"] = False
-                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되고 매출({amount:,.0f}원)이 계상되었습니다.")
+                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되고 매출({amount:,.0f}원)이 반영되었습니다.")
                         rerun()
 
     tab1, tab2 = st.tabs(["📋 회원 세션 관리 & 메모/사전설문", "💰 월별 매출 통합 분석"])
@@ -1811,8 +1812,8 @@ def page_members(members, sales, bookings, logs, reports):
                         "amount": tot_re_amount,
                         "pay_type": re_pay_type
                     }
-                    sales = pd.concat([sales, pd.DataFrame([new_s])], ignore_index=True)
-                    save_sales(sales)
+                    updated_sales = pd.concat([sales, pd.DataFrame([new_s])], ignore_index=True)
+                    save_sales(updated_sales)
 
                     st.session_state["re_pay_open_id"] = None
                     st.toast(f"🎉 '{m['name']}' 회원 {re_sess}회 재등록 ({tot_re_amount:,.0f}원) 결제 집계가 완료되었습니다!")
@@ -1867,19 +1868,23 @@ def page_members(members, sales, bookings, logs, reports):
 
     with tab2:
         st.subheader("💰 월별 매출 통합 분석")
-        if sales.empty:
+        
+        # [문제 1 해결] 세션 상태의 저장소에서 직접 로드하여 실시간 동기화
+        current_sales = st.session_state.get("sales_df", sales)
+        
+        if current_sales.empty:
             st.info("등록된 매출 내역이 없습니다.")
         else:
-            sales["date_dt"] = pd.to_datetime(sales["date"], errors="coerce")
-            sales["month_str"] = sales["date_dt"].dt.strftime("%Y-%m")
+            current_sales["date_dt"] = pd.to_datetime(current_sales["date"], errors="coerce")
+            current_sales["month_str"] = current_sales["date_dt"].dt.strftime("%Y-%m")
 
-            all_months = sorted(list(sales["month_str"].dropna().unique()), reverse=True)
+            all_months = sorted(list(current_sales["month_str"].dropna().unique()), reverse=True)
             curr_month_str = date.today().strftime("%Y-%m")
             default_idx = all_months.index(curr_month_str) if curr_month_str in all_months else 0
 
             sel_month = st.selectbox("📅 조회할 월 선택", all_months, index=default_idx)
 
-            filtered_sales = sales[sales["month_str"] == sel_month].copy()
+            filtered_sales = current_sales[current_sales["month_str"] == sel_month].copy()
             filtered_sales["amount_num"] = pd.to_numeric(filtered_sales["amount"], errors="coerce").fillna(0)
             month_tot_val = filtered_sales["amount_num"].sum()
 
@@ -1913,8 +1918,8 @@ def page_members(members, sales, bookings, logs, reports):
                 with col_s3:
                     if st.button("🗑️ 삭제", key=f"btn_del_sale_{sale_id}_{idx}", use_container_width=True):
                         supabase.table("sales").delete().eq("sale_id", sale_id).execute()
-                        sales = sales[sales["sale_id"].astype(str) != str(sale_id)]
-                        save_sales(sales)
+                        updated_sales = current_sales[current_sales["sale_id"].astype(str) != str(sale_id)]
+                        save_sales(updated_sales)
                         st.toast("해당 매출 내역이 삭제되었습니다.")
                         rerun()
 
