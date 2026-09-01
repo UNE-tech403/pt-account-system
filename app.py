@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (현재 시각 기준 예약 시간대 자동 필터링 적용 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (현재 시각 기반 시간대/달력 정밀 자동 동기화 반영)
 ================================================================================
 """
 
@@ -79,13 +79,25 @@ CUSTOM_CSS = f"""
     .slot-booked {{ background:{COLOR_ICE}; border-radius:8px; padding:12px; font-size:15px; border-left: 4px solid {COLOR_BLUE}; }}
     .cal-weekday {{ text-align:center; font-weight:800; color:#64748B; font-size:12px; padding-bottom:4px; }}
 
+    .custom-item-card {{
+        background: #FFFFFF;
+        border-left: 5px solid {COLOR_BLUE};
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin-bottom: 8px;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }}
+
     .gender-badge-female {{
         background-color: #FFE4E6; color: #E11D48; padding: 3px 10px;
-        border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid #FECDD3;
+        border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid #FECDD3; display: inline-block;
     }}
     .gender-badge-male {{
         background-color: #DCFCE7; color: #15803D; padding: 3px 10px;
-        border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid #BBF7D0;
+        border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid #BBF7D0; display: inline-block;
     }}
 
     .status-attend {{
@@ -659,17 +671,38 @@ def page_dashboard(members, logs, sales, reports, bookings):
         
         if sel_metric == "members":
             st.subheader("👥 전체 관리 회원 상세 리스트")
-            disp_m = members[["member_id", "name", "gender", "contact", "reg_date", "total_sessions", "remaining_sessions", "status", "goal"]].copy()
-            disp_m.columns = ["회원ID", "이름", "성별", "연락처", "등록일", "총 세션", "남은 세션", "상태", "운동목표"]
-            st.dataframe(disp_m, use_container_width=True, hide_index=True)
+            for _, m in members.iterrows():
+                g_badge = get_gender_badge_html(m.get("gender"))
+                st.markdown(f"""
+                <div class="custom-item-card">
+                    <div>
+                        <span style="font-size:16px; font-weight:800; color:{COLOR_NAVY};">👤 {m['name']} 회원님</span> {g_badge}
+                        <span style="font-size:13px; color:#64748B; margin-left:10px;">📞 {m['contact']} | 🗓️ 등록일: {m['reg_date']}</span>
+                    </div>
+                    <div style="font-size:13.5px; font-weight:700; color:{COLOR_BLUE};">
+                        🎯 목표: {m.get('goal','-')} | 잔여 세션: <b>{int(m['remaining_sessions'])}회</b>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
         elif sel_metric == "sessions":
             st.subheader("📊 회원별 잔여 PT 세션 현황 리스트")
-            disp_s = members[["name", "gender", "contact", "total_sessions", "remaining_sessions"]].copy()
-            disp_s["진행 세션"] = disp_s["total_sessions"].astype(int) - disp_s["remaining_sessions"].astype(int)
-            disp_s = disp_s[["name", "gender", "contact", "total_sessions", "진행 세션", "remaining_sessions"]].sort_values("remaining_sessions")
-            disp_s.columns = ["이름", "성별", "연락처", "총 등록 세션", "진행 완료 세션", "잔여 세션"]
-            st.dataframe(disp_s, use_container_width=True, hide_index=True)
+            for _, m in members.sort_values("remaining_sessions").iterrows():
+                tot = int(m['total_sessions'])
+                rem = int(m['remaining_sessions'])
+                done = tot - rem
+                g_badge = get_gender_badge_html(m.get("gender"))
+                st.markdown(f"""
+                <div class="custom-item-card">
+                    <div>
+                        <span style="font-size:16px; font-weight:800; color:{COLOR_NAVY};">👤 {m['name']} 회원님</span> {g_badge}
+                        <span style="font-size:13px; color:#64748B; margin-left:10px;">진행 완료: {done}회 / 총 {tot}회</span>
+                    </div>
+                    <div style="font-size:16px; font-weight:800; color:#E11D48;">
+                        ⏳ 남은 세션 : {rem}회
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
         elif sel_metric == "logs":
             st.subheader(f"📝 {today.year}년 {today.month}월 진행된 수업일지 리스트")
@@ -677,9 +710,21 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 st.info("이번 달 진행된 수업일지 내역이 없습니다.")
             else:
                 merged_l = m_logs.merge(members[["member_id", "name", "gender"]], on="member_id", how="left")
-                disp_l = merged_l[["date", "start_time", "end_time", "name", "gender", "rpe_avg", "good_points", "attendance"]].copy()
-                disp_l.columns = ["날짜", "시작시간", "종료시간", "회원명", "성별", "평균 RPE", "피드백 요약", "출결상태"]
-                st.dataframe(disp_l.sort_values("날짜", ascending=False), use_container_width=True, hide_index=True)
+                for _, l in merged_l.sort_values("date", ascending=False).iterrows():
+                    g_badge = get_gender_badge_html(l.get("gender"))
+                    att_badge = get_attendance_badge_html(l.get("attendance"))
+                    st.markdown(f"""
+                    <div class="custom-item-card">
+                        <div>
+                            <span style="font-size:16px; font-weight:800; color:{COLOR_NAVY};">👤 {l.get('name','회원')} 회원님</span> {g_badge} {att_badge}
+                            <div style="font-size:12.5px; color:#64748B; margin-top:4px;">✔ 피드백: {l.get('good_points','-')}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-weight:800; color:{COLOR_BLUE};">⏰ {l['date']} ({l['start_time']} ~ {l['end_time']})</div>
+                            <div style="font-size:12px; color:#64748B; margin-top:2px;">평균 RPE : {l.get('rpe_avg', 7.0)}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
         elif sel_metric == "reports":
             st.subheader("📑 작성 완료된 내 몸 변화설계서 목록")
@@ -687,10 +732,20 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 st.info("작성된 리포트가 없습니다.")
             else:
                 merged_r = reports.merge(members[["member_id", "name", "gender"]], on="member_id", how="left")
-                disp_r = merged_r[["date", "name", "gender", "goal_text", "status", "delivered"]].copy()
-                disp_r["delivered"] = disp_r["delivered"].apply(lambda v: "✅ 완료" if v else "⏳ 미전달")
-                disp_r.columns = ["발행일", "회원명", "성별", "운동목적", "작성상태", "전달여부"]
-                st.dataframe(disp_r.sort_values("발행일", ascending=False), use_container_width=True, hide_index=True)
+                for _, r in merged_r.sort_values("date", ascending=False).iterrows():
+                    g_badge = get_gender_badge_html(r.get("gender"))
+                    deliv_text = '<span style="background:#DCFCE7; color:#15803D; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:800;">✅ 전달완료</span>' if r.get("delivered") else '<span style="background:#F1F5F9; color:#64748B; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:800;">⏳ 미전달</span>'
+                    st.markdown(f"""
+                    <div class="custom-item-card">
+                        <div>
+                            <span style="font-size:16px; font-weight:800; color:{COLOR_NAVY};">📄 {r.get('name','회원')} 회원의 변화설계서</span> {g_badge} {deliv_text}
+                            <div style="font-size:13px; color:#64748B; margin-top:4px;">🎯 운동목적: {r.get('goal_text','-')}</div>
+                        </div>
+                        <div style="font-weight:800; color:#64748B;">
+                            🗓️ 발행일: {r['date']}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
         elif sel_metric == "sales":
             st.subheader(f"💰 {today.year}년 {today.month}월 결제 매출 상세 내역")
@@ -698,11 +753,23 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 st.info("이번 달 집계된 매출 내역이 없습니다.")
             else:
                 merged_sal = m_sales.merge(members[["member_id", "name", "gender"]], on="member_id", how="left")
-                disp_sal = merged_sal[["date", "name", "gender", "product_name", "amount", "pay_type"]].copy()
-                disp_sal["amount"] = disp_sal["amount"].apply(lambda v: f"{v:,.0f}원")
-                disp_sal.columns = ["결제일", "회원명", "성별", "상품명", "결제금액", "결제수단"]
-                st.dataframe(disp_sal.sort_values("결제일", ascending=False), use_container_width=True, hide_index=True)
+                for _, s in merged_sal.sort_values("date", ascending=False).iterrows():
+                    g_badge = get_gender_badge_html(s.get("gender")) if pd.notna(s.get("gender")) else ""
+                    pay_amt = safe_float(s.get("amount", 0))
+                    st.markdown(f"""
+                    <div class="custom-item-card">
+                        <div>
+                            <span style="font-size:16px; font-weight:800; color:{COLOR_NAVY};">👤 {s.get('name','회원')} 회원님</span> {g_badge}
+                            <span style="font-size:13px; color:#64748B; margin-left:10px;">💳 상품명: {s.get('product_name','-')} ({s.get('pay_type','카드')})</span>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:18px; font-weight:900; color:{COLOR_BLUE};">{pay_amt:,.0f}원</div>
+                            <div style="font-size:12px; color:#64748B;">🗓️ 결제일: {s['date']}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
+        st.write("")
         if st.button("❌ 상세 리스트 닫기", key="btn_close_metric_detail"):
             st.session_state["dash_selected_metric"] = None
             rerun()
@@ -722,9 +789,11 @@ def page_dashboard(members, logs, sales, reports, bookings):
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("#### 📅 수업 일정 달력 및 일별 출석/결석 스케줄")
 
-    if "dash_cal_year" not in st.session_state: st.session_state["dash_cal_year"] = today.year
-    if "dash_cal_month" not in st.session_state: st.session_state["dash_cal_month"] = today.month
-    if "dash_selected_date" not in st.session_state: st.session_state["dash_selected_date"] = today.isoformat()
+    # [수정 2 반영] 달력 기본 연/월/날짜를 항상 현재 시점(오늘)으로 자동 유지
+    st.session_state["dash_cal_year"] = today.year
+    st.session_state["dash_cal_month"] = today.month
+    if "dash_selected_date" not in st.session_state:
+        st.session_state["dash_selected_date"] = today.isoformat()
 
     c_cal, c_detail = st.columns([1.1, 1.2])
 
@@ -866,14 +935,17 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (현재 시간 기준 과거 시간대 옵션 제거)
+# 5. 페이지: 수업 등록 (현재 시각 기준 완벽 필터링 적용)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
 
-    if "cal_year" not in st.session_state: st.session_state["cal_year"] = date.today().year
-    if "cal_month" not in st.session_state: st.session_state["cal_month"] = date.today().month
-    if "selected_cal_date" not in st.session_state: st.session_state["selected_cal_date"] = date.today().isoformat()
+    today = date.today()
+    # [수정 2 반영] 오늘 날짜/연/월 기준으로 자동 동기화
+    st.session_state["cal_year"] = today.year
+    st.session_state["cal_month"] = today.month
+    if "selected_cal_date" not in st.session_state:
+        st.session_state["selected_cal_date"] = today.isoformat()
 
     year = st.session_state["cal_year"]
     month = st.session_state["cal_month"]
@@ -917,7 +989,7 @@ def page_booking(members, bookings):
             this_date = date(year, month, day_num).isoformat()
             day_count = len(active_bookings[active_bookings["date"] == this_date])
             is_selected = (this_date == st.session_state["selected_cal_date"])
-            is_today = (this_date == date.today().isoformat())
+            is_today = (this_date == today.isoformat())
 
             if day_count > 0:
                 label = f"🟢 {day_num}일 ({day_count}건)"
@@ -969,17 +1041,18 @@ def page_booking(members, bookings):
         st.markdown("---")
         st.markdown("##### ➕ 신규 수업 예약 등록")
 
-        # [요청 반영] 현재 시간 기준 지나간 시간대 옵션 제거 로직
+        # [수정 1 반영] 현재 시각 기준 이미 지난 정시 시간대(ex. 07:42 -> 06:00, 07:00 제외) 제외 로직
         now_dt = datetime.now()
         today_str = date.today().isoformat()
         
         valid_slots = []
         for slot in TIME_SLOTS:
             sh, sm = map(int, slot.split(":"))
-            slot_dt = datetime.strptime(sel_date, "%Y-%m-%d").replace(hour=sh, minute=sm)
-            # 오늘 날짜인 경우 현재 시각 이후의 시간대만 추가 (미래 날짜는 전체 허용)
+            slot_start_dt = datetime.strptime(sel_date, "%Y-%m-%d").replace(hour=sh, minute=sm)
+            
             if sel_date == today_str:
-                if slot_dt >= now_dt:
+                # 수업 시작 시간 정시 기준 이미 지난 시점은 제외
+                if slot_start_dt > now_dt:
                     valid_slots.append(slot)
             elif sel_date > today_str:
                 valid_slots.append(slot)
