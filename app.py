@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 완벽연동 & AI 에이전트 수정 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (완벽 버그 수정 및 실시간 동기화 버전)
 ================================================================================
 """
 
@@ -90,15 +90,11 @@ CUSTOM_CSS = f"""
 
     .status-attend {{
         background-color: #DCFCE7; color: #15803D; padding: 4px 12px;
-        border-radius: 12px; font-weight: 800; font-size: 13px; border: 1px solid #BBF7D0; display: inline-block;
+        border-radius: 12px; font-weight: 800; font-size: 13px; border: 1px solid #BBF7D0;
     }}
     .status-absent {{
         background-color: #FFE4E6; color: #E11D48; padding: 4px 12px;
-        border-radius: 12px; font-weight: 800; font-size: 13px; border: 1px solid #FECDD3; display: inline-block;
-    }}
-    .status-pending {{
-        background-color: #F1F5F9; color: #64748B; padding: 4px 12px;
-        border-radius: 12px; font-weight: 800; font-size: 13px; border: 1px solid #E2E8F0; display: inline-block;
+        border-radius: 12px; font-weight: 800; font-size: 13px; border: 1px solid #FECDD3;
     }}
 
     .tr-high {{ background-color: #DCFCE7; color: #166534; padding: 4px 8px; border-radius: 6px; font-weight: 800; }}
@@ -375,7 +371,7 @@ def get_attendance_badge_html(status):
         return '<span class="status-attend">🟢 출석 완료</span>'
     elif st_str in ["결석", "노쇼"]:
         return '<span class="status-absent">🔴 노쇼 / 결석</span>'
-    return '<span class="status-pending">⏳ 미체크</span>'
+    return '<span style="color:#64748B;">⏳ 미체크</span>'
 
 
 # =========================================================
@@ -645,7 +641,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     m_name = b_row.get("name") or "회원"
                     m_gender = b_row.get("gender") or "남성"
                     
-                    # DB 최신 실시간 상태 동기화
+                    # 수치 타입 동기화 및 DB 재조회
                     m_log = logs[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id)]
                     att_status = m_log.iloc[0].get("attendance") if not m_log.empty and pd.notna(m_log.iloc[0].get("attendance")) and str(m_log.iloc[0].get("attendance")).strip() != "" else "미체크"
                     
@@ -1055,7 +1051,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (AI 에이전트 완벽 수정)
+# 7. 페이지: AI 내 몸 변화 설계서 (HTML 깨짐 및 모달 버그 완벽 해결)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1103,6 +1099,13 @@ def page_bodyplan(members, reports):
             if st.button(btn_label, key=f"btn_write_{m_id}_{idx}", use_container_width=True):
                 st.session_state["editing_member_id"] = m_id
                 st.session_state["show_modal"] = False
+                st.session_state.pop("ai_analysis", None)
+                st.session_state.pop("ai_posture_text", None)
+                st.session_state.pop("ai_func_text", None)
+                st.session_state.pop("ai_p1", None)
+                st.session_state.pop("ai_p2", None)
+                st.session_state.pop("ai_p3", None)
+                st.session_state.pop("ai_comment", None)
                 rerun()
 
         with col_c:
@@ -1186,7 +1189,7 @@ def page_bodyplan(members, reports):
             refined_posture = refine_raw_text(raw_posture)
             refined_func = refine_raw_text(raw_func)
 
-            st.session_state[f"val_analysis_{e_id}"] = f"""[신체 정밀 종합 분석]
+            st.session_state[f"ai_analysis_{e_id}"] = f"""[신체 정밀 종합 분석]
 {selected_m['name']} 회원님의 개별 신체 정렬과 운동 목적을 정밀 분석한 결과, 핵심 개선 과제는 {refined_goal} 및 안정적인 신체 밸런스 형성입니다.
 
 자세 및 기능 평가 결과 {refined_posture} 상태와 더불어 {refined_func} 현상이 확인되었습니다. 이러한 보상 작용을 원천 케어하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 바탕으로 관절 가동 범위를 개선하고 타겟 주동근 자극을 극대화하는 3단계 맞춤 로드맵을 적용합니다."""
@@ -1194,11 +1197,11 @@ def page_bodyplan(members, reports):
             st.session_state[f"ai_posture_text_{e_id}"] = f"체형 정렬 평가: {refined_posture} 상태가 관찰됨에 따라 좌우 밸런스 및 관절 정렬 케어 진행"
             st.session_state[f"ai_func_text_{e_id}"] = f"동작 가동성 평가: {refined_func} 현상이 확인되어 주동근 고립 및 보상 근육 개입 방지 훈련 실시"
 
-            st.session_state[f"val_p1_{e_id}"] = "Phase 1 [1-4주차: 굳은 관절 이완 & 바른 호흡 정렬 익히기]\n• 타이트해진 발목 및 흉추 관절의 가동 범위를 부드럽게 확보\n• 횡격막 호흡 및 코어 근육 활성화를 통해 신체 중심부 정렬 바로잡기"
-            st.session_state[f"val_p2_{e_id}"] = "Phase 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 승모근 및 기타 보상 작용 없이 타겟 주동근에 확실한 자극 고립\n• 바른 동작 궤적 내에서 점진적 과부하 원칙을 적용한 맞춤 중량 훈련"
-            st.session_state[f"val_p3_{e_id}"] = "Phase 3 [9-12주차: 체력 및 근지구력 극대화 & 자율 독립 루틴 완성]\n• 수행 능력을 극대화하는 정밀 기술 세트 적용\n• 회원님 맞춤 자율 운동 프로그램을 완벽히 체득하여 독립적인 운동 자립 완성"
+            st.session_state[f"ai_p1_{e_id}"] = "Phase 1 [1-4주차: 굳은 관절 이완 & 바른 호흡 정렬 익히기]\n• 타이트해진 발목 및 흉추 관절의 가동 범위를 부드럽게 확보\n• 횡격막 호흡 및 코어 근육 활성화를 통해 신체 중심부 정렬 바로잡기"
+            st.session_state[f"ai_p2_{e_id}"] = "Phase 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 승모근 및 기타 보상 작용 없이 타겟 주동근에 확실한 자극 고립\n• 바른 동작 궤적 내에서 점진적 과부하 원칙을 적용한 맞춤 중량 훈련"
+            st.session_state[f"ai_p3_{e_id}"] = "Phase 3 [9-12주차: 체력 및 근지구력 극대화 & 자율 독립 루틴 완성]\n• 수행 능력을 극대화하는 정밀 기술 세트 적용\n• 회원님 맞춤 자율 운동 프로그램을 완벽히 체득하여 독립적인 운동 자립 완성"
 
-            st.session_state[f"val_comment_{e_id}"] = f"""{selected_m['name']} 회원님, 반갑습니다! 담당 트레이너 {MY_NAME}입니다.
+            st.session_state[f"ai_comment_{e_id}"] = f"""{selected_m['name']} 회원님, 반갑습니다! 담당 트레이너 {MY_NAME}입니다.
 
 운동을 시작하실 때 가장 중요한 것은 단순히 몸을 움직이는 것을 넘어, 내 몸이 어떤 균형 상태에 있는지를 명확히 알고 바른 방향으로 차근차근 나아가는 것입니다.
 
@@ -1209,17 +1212,17 @@ def page_bodyplan(members, reports):
             st.toast("전문 톤앤매너 가이드 및 장문 코멘트 작성이 완료되었습니다!")
             rerun()
 
-        default_analysis = st.session_state.get(f"val_analysis_{e_id}", r_row.get("analysis_text") if has_existing else "")
-        default_p1 = st.session_state.get(f"val_p1_{e_id}", r_row.get("phase1_text") if has_existing else "")
-        default_p2 = st.session_state.get(f"val_p2_{e_id}", r_row.get("phase2_text") if has_existing else "")
-        default_p3 = st.session_state.get(f"val_p3_{e_id}", r_row.get("phase3_text") if has_existing else "")
-        default_comment = st.session_state.get(f"val_comment_{e_id}", r_row.get("trainer_comment") if has_existing else "")
+        default_analysis = r_row.get("analysis_text") if has_existing else ""
+        default_p1 = r_row.get("phase1_text") if has_existing else ""
+        default_p2 = r_row.get("phase2_text") if has_existing else ""
+        default_p3 = r_row.get("phase3_text") if has_existing else ""
+        default_comment = r_row.get("trainer_comment") if has_existing else ""
 
-        analysis = st.text_area("1. 신체 정밀 종합 분석", value=default_analysis, height=130, key=f"ta_analysis_{e_id}")
-        p1 = st.text_area("Phase 1 로드맵 (1~4주차)", value=default_p1, height=80, key=f"ta_p1_{e_id}")
-        p2 = st.text_area("Phase 2 로드맵 (5~8주차)", value=default_p2, height=80, key=f"ta_p2_{e_id}")
-        p3 = st.text_area("Phase 3 로드맵 (9~12주차)", value=default_p3, height=80, key=f"ta_p3_{e_id}")
-        comment = st.text_area("김준수 트레이너 마스터 응원 코멘트 (장문 작성)", value=default_comment, height=160, key=f"ta_comment_{e_id}")
+        analysis = st.text_area("1. 신체 정밀 종합 분석", value=st.session_state.get(f"ai_analysis_{e_id}", default_analysis), height=130, key=f"ta_analysis_{e_id}")
+        p1 = st.text_area("Phase 1 로드맵 (1~4주차)", value=st.session_state.get(f"ai_p1_{e_id}", default_p1), height=80, key=f"ta_p1_{e_id}")
+        p2 = st.text_area("Phase 2 로드맵 (5~8주차)", value=st.session_state.get(f"ai_p2_{e_id}", default_p2), height=80, key=f"ta_p2_{e_id}")
+        p3 = st.text_area("Phase 3 로드맵 (9~12주차)", value=st.session_state.get(f"ai_p3_{e_id}", default_p3), height=80, key=f"ta_p3_{e_id}")
+        comment = st.text_area("김준수 트레이너 마스터 응원 코멘트 (장문 작성)", value=st.session_state.get(f"ai_comment_{e_id}", default_comment), height=160, key=f"ta_comment_{e_id}")
 
         col_save, col_cancel = st.columns([1, 1])
         if col_save.button("🚀 최종 설계서 저장 및 리포트 완성", type="primary", use_container_width=True, key=f"btn_save_rep_{e_id}"):
@@ -1373,7 +1376,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (출결 완벽 시각화 히스토리)
+# 9. 페이지: 회원 관리
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1546,7 +1549,7 @@ def page_members(members, sales, bookings, logs, reports):
             if has_memo and memo_open_id != m_id:
                 st.caption(f"💬 특이사항 메모: {m['memo']}")
 
-            # 회원이름 클릭 시: 예약 및 출석/노쇼 히스토리 출력 (초록/빨강 UI 시각화)
+            # 회원이름 클릭 시: 예약 및 출석/노쇼 히스토리 출력 (빨강/초록 시각화 적용)
             if memo_open_id == m_id:
                 st.markdown("---")
                 st.markdown(f"#### 📅 '{m['name']}' 회원 수업 예약 및 출결/노쇼 히스토리")
@@ -1556,6 +1559,7 @@ def page_members(members, sales, bookings, logs, reports):
                 if m_bks.empty:
                     st.info("예약된 수업 이력이 없습니다.")
                 else:
+                    hist_data = []
                     for _, b_row in m_bks.iterrows():
                         b_date = b_row["date"]
                         b_slot = b_row.get("time_slot", "-")
@@ -1564,18 +1568,18 @@ def page_members(members, sales, bookings, logs, reports):
                         att_val = str(m_log.iloc[0].get("attendance")).strip() if not m_log.empty and pd.notna(m_log.iloc[0].get("attendance")) else "미체크"
                         
                         if att_val == "출석":
-                            att_badge = '<span class="status-attend">🟢 출석 완료</span>'
+                            att_disp = "🟢 출석 완료"
                         elif att_val in ["결석", "노쇼"]:
-                            att_badge = '<span class="status-absent">🔴 노쇼 / 결석</span>'
+                            att_disp = "🔴 노쇼 / 결석"
                         else:
-                            att_badge = '<span class="status-pending">⏳ 미체크 (예정)</span>'
+                            att_disp = "⏳ 미체크 (예정)"
 
-                        st.markdown(f"""
-                        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 16px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
-                            <div><b>📅 {b_date}</b> &nbsp;|&nbsp; ⏰ 예약시간: <b>{b_slot}</b></div>
-                            <div>{att_badge}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        hist_data.append({
+                            "수업 날짜": b_date,
+                            "예약 시간": b_slot,
+                            "출결 상태": att_disp
+                        })
+                    st.dataframe(pd.DataFrame(hist_data), use_container_width=True, hide_index=True)
 
                 st.markdown(f"#### 📋 '{m['name']}' 회원 특이사항 메모 & PT 사전 상담 설문지")
                 
