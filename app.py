@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 동기화 및 UI 완벽 개선 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 완벽 재로드 & UI 수정 버전)
 ================================================================================
 """
 
@@ -366,9 +366,10 @@ def get_gender_badge_html(gender):
 
 
 def get_attendance_badge_html(status):
-    if status == "출석":
+    st_str = str(status).strip() if pd.notna(status) else ""
+    if st_str == "출석":
         return '<span class="status-attend">🟢 출석 완료</span>'
-    elif status in ["결석", "노쇼"]:
+    elif st_str in ["결석", "노쇼"]:
         return '<span class="status-absent">🔴 노쇼 / 결석</span>'
     return '<span style="color:#64748B;">⏳ 미체크</span>'
 
@@ -521,7 +522,7 @@ def build_4step_report_html(member, report):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드 (출결 실시간 동기화 완료)
+# 4. 페이지 1: 센터 대시보드
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -640,7 +641,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     m_name = b_row.get("name") or "회원"
                     m_gender = b_row.get("gender") or "남성"
                     
-                    # 수치 비교 완전 보완
+                    # 수치 타입 동기화 로직 보완
                     m_log = logs[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id)]
                     att_status = m_log.iloc[0].get("attendance") if not m_log.empty and pd.notna(m_log.iloc[0].get("attendance")) and str(m_log.iloc[0].get("attendance")).strip() != "" else "미체크"
                     
@@ -1050,7 +1051,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (깨진 HTML 태그 완전 제거)
+# 7. 페이지: AI 내 몸 변화 설계서 (HTML 깨짐 및 모달 버그 해결)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1089,15 +1090,15 @@ def page_bodyplan(members, reports):
             else:
                 st.caption("⏳ 미작성")
 
-        # HTML 깨짐 없이 깔끔하게 이름 출력
         with col_a:
-            st.markdown(f"##### **{m['name']} 회원님** &nbsp; {g_badge}", unsafe_allow_html=True)
-            st.caption(f"연락처: {m['contact']} | 담당: {MY_NAME} | 목표: {m.get('goal','-')}")
+            st.markdown(f"**{m['name']} 회원님** &nbsp; {g_badge}", unsafe_allow_html=True)
+            st.markdown(f"<span style='font-size:13px; color:#64748B;'>연락처: {m['contact']} | 담당: {MY_NAME} | 목표: {m.get('goal','-')} | 리포트: {rep_status_html}</span>", unsafe_allow_html=True)
 
         with col_b:
             btn_label = "✍️ 설계서 수정" if has_report else "➕ 설계서 작성하기"
             if st.button(btn_label, key=f"btn_write_{m_id}_{idx}", use_container_width=True):
                 st.session_state["editing_member_id"] = m_id
+                st.session_state["show_modal"] = False  # 모달 닫기
                 st.session_state.pop("ai_analysis", None)
                 st.session_state.pop("ai_posture_text", None)
                 st.session_state.pop("ai_func_text", None)
@@ -1112,6 +1113,7 @@ def page_bodyplan(members, reports):
                 if st.button("📄 리포트 보기", key=f"btn_view_{m_id}_{idx}", use_container_width=True):
                     st.session_state["selected_member_id"] = m_id
                     st.session_state["show_modal"] = True
+                    st.session_state["editing_member_id"] = None
                     rerun()
 
         st.markdown('</div>', unsafe_allow_html=True)
@@ -1543,6 +1545,7 @@ def page_members(members, sales, bookings, logs, reports):
             if has_memo and memo_open_id != m_id:
                 st.caption(f"💬 특이사항 메모: {m['memo']}")
 
+            # 회원이름 클릭 시: 특이사항 + 사전설문 + 예약 및 출석/노쇼 히스토리 출력
             if memo_open_id == m_id:
                 st.markdown("---")
                 st.markdown(f"#### 📅 '{m['name']}' 회원 수업 예약 및 출결/노쇼 히스토리")
@@ -1558,7 +1561,7 @@ def page_members(members, sales, bookings, logs, reports):
                         b_slot = b_row.get("time_slot", "-")
                         
                         m_log = logs[(pd.to_numeric(logs["member_id"], errors="coerce") == m_id) & (logs["date"] == b_date)]
-                        att_val = m_log.iloc[0].get("attendance") if not m_log.empty and pd.notna(m_log.iloc[0].get("attendance")) and str(m_log.iloc[0].get("attendance")).strip() != "" else "미체크"
+                        att_val = str(m_log.iloc[0].get("attendance")).strip() if not m_log.empty and pd.notna(m_log.iloc[0].get("attendance")) else "미체크"
                         
                         if att_val == "출석":
                             att_disp = "🟢 출석 완료"
