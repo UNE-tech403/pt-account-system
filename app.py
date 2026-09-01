@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (날짜 자동 리셋 & RPE 완전 제거 반영 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (실매출 보장 & 실시간 날짜/시간 엄격 동기화 버전)
 ================================================================================
 """
 
@@ -136,8 +136,6 @@ MEMBERS_COLUMNS = [
     "tr_expect", "re_status", "week_group", "memo", "survey_json",
     "exp_re_sessions", "exp_re_price", "is_exp_configured"
 ]
-
-# RPE 항목 제거 반영 컬럼 정의
 LOGS_COLUMNS = ["log_id", "member_id", "date", "start_time", "end_time", "exercises_json", "good_points", "improve_points", "sent", "attendance"]
 INBODY_COLUMNS = ["record_id", "member_id", "date", "weight", "skeletal_muscle", "body_fat_pct"]
 SALES_COLUMNS = ["sale_id", "member_id", "date", "product_name", "amount", "pay_type"]
@@ -154,7 +152,6 @@ RE_STATUS_OPTIONS = ["결제완료", "결제예정", "이월", "이탈", "전월
 TIME_SLOTS = [f"{h:02d}:00" for h in range(6, 23)]
 WEEKDAY_LABELS_KR = ["일", "월", "화", "수", "목", "금", "토"]
 
-# RPE 항목 제거 프리셋 루틴
 PRESET_ROUTINES_DF = {
     "가슴": pd.DataFrame([
         {"종목": "벤치프레스", "중량(kg)": 40.0, "횟수": 10, "세트": 4},
@@ -417,7 +414,6 @@ def next_id(df, id_col):
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
 
 
-# 카카오톡 메시지에서 RPE 문구 제거
 def generate_friendly_message_from_data(member_name, exercises_df, good, improve):
     ex_summary = []
     if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
@@ -627,6 +623,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
     m_logs = logs_copy[logs_copy["month_p"] == this_month]
     m_logs_count = len(m_logs)
 
+    # [수정] 매출항목 독립 산출 - 재등록 예상가 및 tr_expect 설정에 차단되지 않고 항시 집계
     sales_copy = sales.copy()
     sales_copy["month_p"] = pd.to_datetime(sales_copy["date"], errors="coerce").dt.to_period("M")
     m_sales = sales_copy[sales_copy["month_p"] == this_month]
@@ -791,11 +788,10 @@ def page_dashboard(members, logs, sales, reports, bookings):
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("#### 📅 수업 일정 달력 및 일별 출석/결석 스케줄")
 
-    # 달력 기본 연/월/날짜를 현재 실시간 시각으로 세팅
+    # [수정] 대시보드 달력 실시간 현재 날짜(9/2) 고정
     st.session_state["dash_cal_year"] = today.year
     st.session_state["dash_cal_month"] = today.month
-    if "dash_selected_date" not in st.session_state or st.session_state["dash_selected_date"] < today.isoformat():
-        st.session_state["dash_selected_date"] = today.isoformat()
+    st.session_state["dash_selected_date"] = today.isoformat()
 
     c_cal, c_detail = st.columns([1.1, 1.2])
 
@@ -937,7 +933,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (현재 시각 기반 날짜/시간 엄격 자동 세팅)
+# 5. 페이지: 수업 등록 (오늘 날짜 9/2 및 현재 시간 필터 완벽 고정)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
@@ -945,12 +941,10 @@ def page_booking(members, bookings):
     today = date.today()
     today_str = today.isoformat()
     
-    # [수정 1] 달력의 선택 날짜를 항상 실시간 '오늘 날짜'로 초기화 및 보정
+    # [수정] 수업 등록 진입 시 항상 실제 오늘 날짜(9/2)로 자동 동기화
     st.session_state["cal_year"] = today.year
     st.session_state["cal_month"] = today.month
-    
-    if "selected_cal_date" not in st.session_state or st.session_state["selected_cal_date"] < today_str:
-        st.session_state["selected_cal_date"] = today_str
+    st.session_state["selected_cal_date"] = today_str
 
     year = st.session_state["cal_year"]
     month = st.session_state["cal_month"]
@@ -1047,7 +1041,7 @@ def page_booking(members, bookings):
         st.markdown("---")
         st.markdown("##### ➕ 신규 수업 예약 등록")
 
-        # [수정 3] 현재 시각 기준 지나간 정시(Hour) 및 과거 시간대 완벽 필터링
+        # [수정] 현재 시각(08시) 이하의 모든 지나간 시간대(06시~08시) 드롭다운에서 완벽 제거
         now_dt = datetime.now()
         
         valid_slots = []
@@ -1055,7 +1049,7 @@ def page_booking(members, bookings):
             sh, sm = map(int, slot.split(":"))
             
             if sel_date == today_str:
-                # 현재 시각의 '시(Hour)'보다 큰 시간대만 드롭다운에 추가 (ex: 08:21이면 09:00부터)
+                # 현재 시각의 '시(Hour)'보다 큰 정시 시간대만 노출 (ex: 08:36 -> 09:00부터 노출)
                 if sh > now_dt.hour:
                     valid_slots.append(slot)
             elif sel_date > today_str:
@@ -1532,7 +1526,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 (RPE 컬럼 완벽 제거)
+# 8. 페이지: 수업일지 작성
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1580,7 +1574,6 @@ def page_journal(members, logs):
     if "exercise_rows_df" not in st.session_state:
         st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "바벨 스쿼트", "중량(kg)": 40.0, "횟수": 10, "세트": 4}])
 
-    # RPE 컬럼을 제거한 data_editor
     edited_df = st.data_editor(st.session_state["exercise_rows_df"], num_rows="dynamic", use_container_width=True)
     st.session_state["exercise_rows_df"] = edited_df
 
@@ -1636,7 +1629,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (신규 등록 시 즉시 매출 반영 보완)
+# 9. 페이지: 회원 관리 (신규 등록 시 즉시 실매출 연동)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1682,6 +1675,7 @@ def page_members(members, sales, bookings, logs, reports):
                         today_obj = date.today()
                         auto_week = get_week_of_month(today_obj)
 
+                        # tr_expect='확인중' 이어도 매출은 독립 저장되도록 보장
                         new_m = {
                             "member_id": new_m_id, "name": name, "contact": contact,
                             "birth_date": "1995-01-01", "reg_date": today_obj.isoformat(),
@@ -1695,7 +1689,7 @@ def page_members(members, sales, bookings, logs, reports):
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         save_members(members)
 
-                        # 매출 데이터 생성 및 세션 상태 즉시 연동
+                        # [수정] 최초 등록 결제건(실매출) 독립 저장
                         new_s = {
                             "sale_id": next_id(sales, "sale_id"), 
                             "member_id": new_m_id, 
@@ -1708,7 +1702,7 @@ def page_members(members, sales, bookings, logs, reports):
                         save_sales(updated_sales)
 
                         st.session_state["show_reg_modal"] = False
-                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되고 매출({amount:,.0f}원)이 반영되었습니다.")
+                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되고 매출({amount:,.0f}원)이 계상되었습니다.")
                         rerun()
 
     tab1, tab2 = st.tabs(["📋 회원 세션 관리 & 메모/사전설문", "💰 월별 매출 통합 분석"])
@@ -1872,7 +1866,7 @@ def page_members(members, sales, bookings, logs, reports):
     with tab2:
         st.subheader("💰 월별 매출 통합 분석")
         
-        # 실시간 매출 데이터프레임 매핑
+        # [수정] 세션 메모리 내 실매출 데이터 직접 연결
         current_sales = st.session_state.get("sales_df", sales)
         
         if current_sales.empty:
