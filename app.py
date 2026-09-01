@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (달력 클릭버그 수정 & 실매출 완전독립 보장)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (KST 대한민국 시간 기준 엄격 반영)
 ================================================================================
 """
 
@@ -9,7 +9,7 @@ import json
 import calendar
 import base64
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
@@ -18,7 +18,14 @@ import streamlit.components.v1 as components
 from supabase import create_client, Client
 
 # =========================================================
-# 0. Supabase DB 연결 설정
+# 0. 대한민국 표준시(KST) 구하기 헬퍼 함수
+# =========================================================
+def get_kst_now():
+    """서버 환경과 상관없이 항상 한국 표준시(UTC+9) 반환"""
+    return datetime.now(timezone(timedelta(hours=9)))
+
+# =========================================================
+# 0-1. Supabase DB 연결 설정
 # =========================================================
 @st.cache_resource
 def init_supabase():
@@ -29,7 +36,7 @@ def init_supabase():
 supabase: Client = init_supabase()
 
 # =========================================================
-# 0-1. 페이지 설정 & 블루톤 UI Design System
+# 0-2. 페이지 설정 & 블루톤 UI Design System
 # =========================================================
 st.set_page_config(
     page_title="PT Account — 김준수 트레이너",
@@ -548,7 +555,7 @@ def build_4step_report_html(member, report):
     <div class="cover-meta">
       <b>회원명:</b> {member.get('name','')} ({member.get('gender','성별미기재')})<br/>
       <b>운동 목표:</b> {report.get('goal_text', member.get('goal','체형교정 및 근력강화'))}<br/>
-      <b>발행일자:</b> {report.get('date', date.today().isoformat())}<br/>
+      <b>발행일자:</b> {report.get('date', get_kst_now().strftime("%Y-%m-%d"))}<br/>
       <div style="margin-top: 8px; color: #94A3B8; font-size: 12.5px;">회원님의 몸 상태를 정밀하게 분석하여 작성된 체계적인 변화 설계서입니다.</div>
       <div style="margin-top: 16px; font-size: 17px; font-weight: 800; color: #60A5FA;">담당 : {MY_NAME} 트레이너</div>
     </div>
@@ -612,7 +619,8 @@ def build_4step_report_html(member, report):
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
 
-    today = date.today()
+    kst_now = get_kst_now()
+    today = kst_now.date()
     total_m = len(members)
     rem_sum = int(pd.to_numeric(members["remaining_sessions"], errors="coerce").fillna(0).sum())
 
@@ -623,8 +631,9 @@ def page_dashboard(members, logs, sales, reports, bookings):
     m_logs = logs_copy[logs_copy["month_p"] == this_month]
     m_logs_count = len(m_logs)
 
-    # [수정] sales 테이블 결제 내역 100% 항시 계산 (확정 실매출만 순수 집계)
-    sales_copy = sales.copy()
+    # [수정] 실매출 독립 계산 - sales_df 기준 100% 항시 집계
+    current_sales = st.session_state.get("sales_df", sales)
+    sales_copy = current_sales.copy()
     sales_copy["month_p"] = pd.to_datetime(sales_copy["date"], errors="coerce").dt.to_period("M")
     m_sales = sales_copy[sales_copy["month_p"] == this_month]
     real_revenue = pd.to_numeric(m_sales["amount"], errors="coerce").fillna(0).sum()
@@ -788,7 +797,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("#### 📅 수업 일정 달력 및 일별 출석/결석 스케줄")
 
-    # [수정] 초기 선택 날짜 설정 (사용자 클릭 시 덮어쓰지 않음)
     if "dash_selected_date" not in st.session_state:
         st.session_state["dash_selected_date"] = today.isoformat()
     if "dash_cal_year" not in st.session_state:
@@ -936,21 +944,22 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (날짜 자유 클릭 및 지나간 시간 완벽 제외)
+# 5. 페이지: 수업 등록 (KST 기준 지난 시간대 엄격 원천 제거)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
 
-    today = date.today()
-    today_str = today.isoformat()
+    # [수정] 대한민국 표준시(KST) 실시간 시각 추출
+    kst_now = get_kst_now()
+    today_str = kst_now.date().isoformat()
     
-    # [수정] 초기 진입 시에만 오늘 날짜 세팅 (클릭 이벤트 유지)
+    # 세션에 고정되어 있던 선택 날짜를 클릭 시 유지 가능하도록 초기 세팅만 보정
     if "selected_cal_date" not in st.session_state:
         st.session_state["selected_cal_date"] = today_str
     if "cal_year" not in st.session_state:
-        st.session_state["cal_year"] = today.year
+        st.session_state["cal_year"] = kst_now.year
     if "cal_month" not in st.session_state:
-        st.session_state["cal_month"] = today.month
+        st.session_state["cal_month"] = kst_now.month
 
     year = st.session_state["cal_year"]
     month = st.session_state["cal_month"]
@@ -1046,16 +1055,14 @@ def page_booking(members, bookings):
         st.markdown("---")
         st.markdown("##### ➕ 신규 수업 예약 등록")
 
-        # [수정] 현재 시각의 '시(Hour)' 이하 모든 지나간 정시 시간대 엄격 필터링
-        now_dt = datetime.now()
-        
+        # [수정] 대한민국 KST 표준시 기준 08시 이하(06:00, 07:00, 08:00) 시간대 완전 제외
         valid_slots = []
         for slot in TIME_SLOTS:
             sh, sm = map(int, slot.split(":"))
             
             if sel_date == today_str:
-                # 현재 시각의 Hour보다 큰 미래 정시 시간대만 수용 (ex: 현재가 08시인 경우 09시부터)
-                if sh > now_dt.hour:
+                # KST 시각의 Hour(08시)보다 큰 정시 시간대(09:00~)만 허용
+                if sh > kst_now.hour:
                     valid_slots.append(slot)
             elif sel_date > today_str:
                 valid_slots.append(slot)
@@ -1101,7 +1108,7 @@ def page_booking(members, bookings):
 def page_re_registration(members, sales):
     st.title("🎯 주차별 재등록 현황 및 매출 예측 뷰어")
 
-    today = date.today()
+    today = get_kst_now().date()
     curr_weeks = get_month_weeks_list(today.year, today.month)
 
     chart_data_tr = []
@@ -1493,7 +1500,7 @@ def page_bodyplan(members, reports):
 
             if existing_mask.any():
                 reports.loc[existing_mask, ["date", "goal_text", "analysis_text", "posture_eval", "func_eval", "phase1_text", "phase2_text", "phase3_text", "trainer_comment", "status"]] = [
-                    date.today().isoformat(), goal_input, analysis,
+                    get_kst_now().strftime("%Y-%m-%d"), goal_input, analysis,
                     json.dumps([{"title": "자세 정밀 체크", "result": posture_text}], ensure_ascii=False),
                     json.dumps([{"title": "움직임 가동성 체크", "result": func_text}], ensure_ascii=False),
                     p1, p2, p3, comment, "작성완료"
@@ -1502,7 +1509,7 @@ def page_bodyplan(members, reports):
                 new_r_id = next_id(reports, "report_id")
                 new_rep = {
                     "report_id": new_r_id, "member_id": e_id,
-                    "date": date.today().isoformat(),
+                    "date": get_kst_now().strftime("%Y-%m-%d"),
                     "goal_text": goal_input,
                     "analysis_text": analysis,
                     "posture_eval": json.dumps([{"title": "자세 정밀 체크", "result": posture_text}], ensure_ascii=False),
@@ -1556,7 +1563,7 @@ def page_journal(members, logs):
     st.markdown("#### 오늘 수업 일정 및 운동 진행 내용")
 
     col_date, col_st, col_et = st.columns([1.2, 1, 1])
-    log_date = col_date.date_input("수업 날짜", value=date.today())
+    log_date = col_date.date_input("수업 날짜", value=get_kst_now().date())
 
     start_time_sel = col_st.selectbox("수업 시작 시간", TIME_SLOTS, index=4)
     
@@ -1634,7 +1641,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (신규 회원 등록 = 실매출 100% 확정 보장)
+# 9. 페이지: 회원 관리 (신규 회원 등록 = 확정 매출 독립 집계)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1677,7 +1684,7 @@ def page_members(members, sales, bookings, logs, reports):
                 if st.form_submit_button("등록 완료", type="primary", use_container_width=True):
                     if name and contact:
                         new_m_id = next_id(members, "member_id")
-                        today_obj = date.today()
+                        today_obj = get_kst_now().date()
                         auto_week = get_week_of_month(today_obj)
 
                         new_m = {
@@ -1693,7 +1700,7 @@ def page_members(members, sales, bookings, logs, reports):
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         save_members(members)
 
-                        # [핵심] 신규 회원등록 시 결제(매출) 데이터 독립 생성 및 강제 싱크
+                        # [핵심] 신규 회원 등록 시 확정 매출 독립 집계 (재등록 상태와 무관하게 100% 반영)
                         new_s = {
                             "sale_id": next_id(sales, "sale_id"), 
                             "member_id": new_m_id, 
@@ -1706,7 +1713,7 @@ def page_members(members, sales, bookings, logs, reports):
                         save_sales(updated_sales)
 
                         st.session_state["show_reg_modal"] = False
-                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되고 실매출({amount:,.0f}원)이 계상되었습니다.")
+                        st.toast(f"'{name}' ({gender}) 회원이 등록되고 확정 매출({amount:,.0f}원)이 반영되었습니다.")
                         rerun()
 
     tab1, tab2 = st.tabs(["📋 회원 세션 관리 & 메모/사전설문", "💰 월별 매출 통합 분석"])
@@ -1808,7 +1815,7 @@ def page_members(members, sales, bookings, logs, reports):
                     new_s = {
                         "sale_id": next_id(sales, "sale_id"),
                         "member_id": m_id,
-                        "date": date.today().isoformat(),
+                        "date": get_kst_now().strftime("%Y-%m-%d"),
                         "product_name": f"PT {re_sess}회 재등록",
                         "amount": tot_re_amount,
                         "pay_type": re_pay_type
@@ -1870,7 +1877,7 @@ def page_members(members, sales, bookings, logs, reports):
     with tab2:
         st.subheader("💰 월별 매출 통합 분석")
         
-        # [수정] 세션 저장소의 sales_df 매핑
+        # [수정] 세션 메모리의 sales_df 100% 매핑
         current_sales = st.session_state.get("sales_df", sales)
         
         if current_sales.empty:
@@ -1880,7 +1887,7 @@ def page_members(members, sales, bookings, logs, reports):
             current_sales["month_str"] = current_sales["date_dt"].dt.strftime("%Y-%m")
 
             all_months = sorted(list(current_sales["month_str"].dropna().unique()), reverse=True)
-            curr_month_str = date.today().strftime("%Y-%m")
+            curr_month_str = get_kst_now().strftime("%Y-%m")
             default_idx = all_months.index(curr_month_str) if curr_month_str in all_months else 0
 
             sel_month = st.selectbox("📅 조회할 월 선택", all_months, index=default_idx)
@@ -1946,7 +1953,7 @@ def page_inbody(members, inbody):
     st.subheader(f"➕ '{selected_m['name']}' 회원 인바디 기록 추가")
 
     ic1, ic2, ic3, ic4, ic5 = st.columns([1.5, 1.2, 1.2, 1.2, 1])
-    in_date = ic1.date_input("측정 날짜", value=date.today(), key=f"in_date_{m_id}")
+    in_date = ic1.date_input("측정 날짜", value=get_kst_now().date(), key=f"in_date_{m_id}")
     in_weight = ic2.number_input("체중 (kg)", min_value=30.0, max_value=200.0, value=70.0, step=0.1, key=f"in_w_{m_id}")
     in_muscle = ic3.number_input("골격근량 (kg)", min_value=10.0, max_value=100.0, value=30.0, step=0.1, key=f"in_m_{m_id}")
     in_fat = ic4.number_input("체지방률 (%)", min_value=3.0, max_value=60.0, value=20.0, step=0.1, key=f"in_f_{m_id}")
