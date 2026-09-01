@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (Supabase DB 완벽 안정화 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 완벽 동기화 & 히스토리 추가 버전)
 ================================================================================
 """
 
@@ -261,7 +261,7 @@ def refine_raw_text(text):
 
 
 # =========================================================
-# 2. Supabase DB 전용 데이터 관리 함수 (데이터 타입 완벽 캐스팅)
+# 2. Supabase DB 전용 데이터 관리 함수
 # =========================================================
 def load_data(table_name, columns):
     try:
@@ -369,8 +369,8 @@ def get_attendance_badge_html(status):
     if status == "출석":
         return '<span class="status-attend">🟢 출석</span>'
     elif status == "결석":
-        return '<span class="status-absent">🔴 결석</span>'
-    return '<span style="color:#64748B;">미체크</span>'
+        return '<span class="status-absent">🔴 결석(노쇼)</span>'
+    return '<span style="color:#64748B;">⏳ 미체크</span>'
 
 
 # =========================================================
@@ -521,7 +521,7 @@ def build_4step_report_html(member, report):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드
+# 4. 페이지 1: 센터 대시보드 (출결체크 및 동기화 완벽 수정)
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -640,8 +640,9 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     m_name = b_row.get("name") or "회원"
                     m_gender = b_row.get("gender") or "남성"
                     
+                    # 수치 타입 동기화 로직 보완
                     m_log = logs[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id)]
-                    att_status = m_log.iloc[0].get("attendance") if not m_log.empty else "미체크"
+                    att_status = m_log.iloc[0].get("attendance") if not m_log.empty and pd.notna(m_log.iloc[0].get("attendance")) and str(m_log.iloc[0].get("attendance")).strip() != "" else "미체크"
                     
                     g_badge = get_gender_badge_html(m_gender)
                     att_badge = get_attendance_badge_html(att_status)
@@ -1366,7 +1367,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리
+# 9. 페이지: 회원 관리 (출석/노쇼 히스토리 기능 추가)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1539,8 +1540,38 @@ def page_members(members, sales, bookings, logs, reports):
             if has_memo and memo_open_id != m_id:
                 st.caption(f"💬 특이사항 메모: {m['memo']}")
 
+            # 회원이름 클릭 시: 특이사항 + 사전설문 + 예약 및 출석/노쇼 히스토리 출력
             if memo_open_id == m_id:
                 st.markdown("---")
+                st.markdown(f"#### 📅 '{m['name']}' 회원 수업 예약 및 출결/노쇼 히스토리")
+
+                m_bks = bookings[(pd.to_numeric(bookings["member_id"], errors="coerce") == m_id) & (bookings["status"] != "취소")].sort_values("date", ascending=False)
+                
+                if m_bks.empty:
+                    st.info("예약된 수업 이력이 없습니다.")
+                else:
+                    hist_data = []
+                    for _, b_row in m_bks.iterrows():
+                        b_date = b_row["date"]
+                        b_slot = b_row.get("time_slot", "-")
+                        
+                        m_log = logs[(pd.to_numeric(logs["member_id"], errors="coerce") == m_id) & (logs["date"] == b_date)]
+                        att_val = m_log.iloc[0].get("attendance") if not m_log.empty and pd.notna(m_log.iloc[0].get("attendance")) and str(m_log.iloc[0].get("attendance")).strip() != "" else "미체크"
+                        
+                        if att_val == "출석":
+                            att_disp = "🟢 출석 완료"
+                        elif att_val == "결석":
+                            att_disp = "🔴 결석 (노쇼)"
+                        else:
+                            att_disp = "⏳ 미체크 (예정)"
+
+                        hist_data.append({
+                            "수업 날짜": b_date,
+                            "예약 시간": b_slot,
+                            "출결 상태": att_disp
+                        })
+                    st.dataframe(pd.DataFrame(hist_data), use_container_width=True, hide_index=True)
+
                 st.markdown(f"#### 📋 '{m['name']}' 회원 특이사항 메모 & PT 사전 상담 설문지")
                 
                 memo_val = st.text_area(
