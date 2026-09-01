@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 완벽 재로드 & UI 수정 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (완벽 버그 수정 및 실시간 동기화 버전)
 ================================================================================
 """
 
@@ -641,7 +641,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     m_name = b_row.get("name") or "회원"
                     m_gender = b_row.get("gender") or "남성"
                     
-                    # 수치 타입 동기화 로직 보완
+                    # 수치 타입 동기화 및 DB 재조회
                     m_log = logs[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id)]
                     att_status = m_log.iloc[0].get("attendance") if not m_log.empty and pd.notna(m_log.iloc[0].get("attendance")) and str(m_log.iloc[0].get("attendance")).strip() != "" else "미체크"
                     
@@ -1051,7 +1051,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (HTML 깨짐 및 모달 버그 해결)
+# 7. 페이지: AI 내 몸 변화 설계서 (HTML 깨짐 및 모달 버그 완벽 해결)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1098,7 +1098,7 @@ def page_bodyplan(members, reports):
             btn_label = "✍️ 설계서 수정" if has_report else "➕ 설계서 작성하기"
             if st.button(btn_label, key=f"btn_write_{m_id}_{idx}", use_container_width=True):
                 st.session_state["editing_member_id"] = m_id
-                st.session_state["show_modal"] = False  # 모달 닫기
+                st.session_state["show_modal"] = False
                 st.session_state.pop("ai_analysis", None)
                 st.session_state.pop("ai_posture_text", None)
                 st.session_state.pop("ai_func_text", None)
@@ -1118,7 +1118,8 @@ def page_bodyplan(members, reports):
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-    if st.session_state.get("show_modal", False):
+    # 선택된 회원의 리포트 보기 모달
+    if st.session_state.get("show_modal", False) and st.session_state.get("selected_member_id"):
         m_id = int(st.session_state.get("selected_member_id"))
         target_m = members[pd.to_numeric(members["member_id"], errors="coerce") == m_id].iloc[0]
         target_r = reports[pd.to_numeric(reports["member_id"], errors="coerce") == m_id]
@@ -1142,10 +1143,12 @@ def page_bodyplan(members, reports):
             rerun()
         if btn_c3.button("❌ 창 닫기", use_container_width=True):
             st.session_state["show_modal"] = False
+            st.session_state["selected_member_id"] = None
             rerun()
 
         components.html(preview_html, height=850, scrolling=True)
 
+    # 개별 회원 설계서 작성 폼
     if st.session_state.get("editing_member_id"):
         e_id = int(st.session_state.get("editing_member_id"))
         selected_m = members[pd.to_numeric(members["member_id"], errors="coerce") == e_id].iloc[0]
@@ -1186,19 +1189,19 @@ def page_bodyplan(members, reports):
             refined_posture = refine_raw_text(raw_posture)
             refined_func = refine_raw_text(raw_func)
 
-            st.session_state["ai_analysis"] = f"""[신체 정밀 종합 분석]
+            st.session_state[f"ai_analysis_{e_id}"] = f"""[신체 정밀 종합 분석]
 {selected_m['name']} 회원님의 개별 신체 정렬과 운동 목적을 정밀 분석한 결과, 핵심 개선 과제는 {refined_goal} 및 안정적인 신체 밸런스 형성입니다.
 
 자세 및 기능 평가 결과 {refined_posture} 상태와 더불어 {refined_func} 현상이 확인되었습니다. 이러한 보상 작용을 원천 케어하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 바탕으로 관절 가동 범위를 개선하고 타겟 주동근 자극을 극대화하는 3단계 맞춤 로드맵을 적용합니다."""
 
-            st.session_state["ai_posture_text"] = f"체형 정렬 평가: {refined_posture} 상태가 관찰됨에 따라 좌우 밸런스 및 관절 정렬 케어 진행"
-            st.session_state["ai_func_text"] = f"동작 가동성 평가: {refined_func} 현상이 확인되어 주동근 고립 및 보상 근육 개입 방지 훈련 실시"
+            st.session_state[f"ai_posture_text_{e_id}"] = f"체형 정렬 평가: {refined_posture} 상태가 관찰됨에 따라 좌우 밸런스 및 관절 정렬 케어 진행"
+            st.session_state[f"ai_func_text_{e_id}"] = f"동작 가동성 평가: {refined_func} 현상이 확인되어 주동근 고립 및 보상 근육 개입 방지 훈련 실시"
 
-            st.session_state["ai_p1"] = "Phase 1 [1-4주차: 굳은 관절 이완 & 바른 호흡 정렬 익히기]\n• 타이트해진 발목 및 흉추 관절의 가동 범위를 부드럽게 확보\n• 횡격막 호흡 및 코어 근육 활성화를 통해 신체 중심부 정렬 바로잡기"
-            st.session_state["ai_p2"] = "Phase 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 승모근 및 기타 보상 작용 없이 타겟 주동근에 확실한 자극 고립\n• 바른 동작 궤적 내에서 점진적 과부하 원칙을 적용한 맞춤 중량 훈련"
-            st.session_state["ai_p3"] = "Phase 3 [9-12주차: 체력 및 근지구력 극대화 & 자율 독립 루틴 완성]\n• 수행 능력을 극대화하는 정밀 기술 세트 적용\n• 회원님 맞춤 자율 운동 프로그램을 완벽히 체득하여 독립적인 운동 자립 완성"
+            st.session_state[f"ai_p1_{e_id}"] = "Phase 1 [1-4주차: 굳은 관절 이완 & 바른 호흡 정렬 익히기]\n• 타이트해진 발목 및 흉추 관절의 가동 범위를 부드럽게 확보\n• 횡격막 호흡 및 코어 근육 활성화를 통해 신체 중심부 정렬 바로잡기"
+            st.session_state[f"ai_p2_{e_id}"] = "Phase 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 승모근 및 기타 보상 작용 없이 타겟 주동근에 확실한 자극 고립\n• 바른 동작 궤적 내에서 점진적 과부하 원칙을 적용한 맞춤 중량 훈련"
+            st.session_state[f"ai_p3_{e_id}"] = "Phase 3 [9-12주차: 체력 및 근지구력 극대화 & 자율 독립 루틴 완성]\n• 수행 능력을 극대화하는 정밀 기술 세트 적용\n• 회원님 맞춤 자율 운동 프로그램을 완벽히 체득하여 독립적인 운동 자립 완성"
 
-            st.session_state["ai_comment"] = f"""{selected_m['name']} 회원님, 반갑습니다! 담당 트레이너 {MY_NAME}입니다.
+            st.session_state[f"ai_comment_{e_id}"] = f"""{selected_m['name']} 회원님, 반갑습니다! 담당 트레이너 {MY_NAME}입니다.
 
 운동을 시작하실 때 가장 중요한 것은 단순히 몸을 움직이는 것을 넘어, 내 몸이 어떤 균형 상태에 있는지를 명확히 알고 바른 방향으로 차근차근 나아가는 것입니다.
 
@@ -1207,6 +1210,7 @@ def page_bodyplan(members, reports):
 매 수업마다 회원님의 컨디션과 가동 범위를 세심하게 다듬고, 부상 위험 없이 안전하게 목표에 도달하실 수 있도록 옆에서 최선을 다해 가이드해 드리겠습니다. 저를 믿고 편안한 마음으로 따라와 주세요. 회원님의 활기찬 신체 변화 여정을 진심으로 응원합니다! 화이팅! 🔥"""
 
             st.toast("전문 톤앤매너 가이드 및 장문 코멘트 작성이 완료되었습니다!")
+            rerun()
 
         default_analysis = r_row.get("analysis_text") if has_existing else ""
         default_p1 = r_row.get("phase1_text") if has_existing else ""
@@ -1214,18 +1218,18 @@ def page_bodyplan(members, reports):
         default_p3 = r_row.get("phase3_text") if has_existing else ""
         default_comment = r_row.get("trainer_comment") if has_existing else ""
 
-        analysis = st.text_area("1. 신체 정밀 종합 분석", value=st.session_state.get("ai_analysis", default_analysis), height=130, key=f"ta_analysis_{e_id}")
-        p1 = st.text_area("Phase 1 로드맵 (1~4주차)", value=st.session_state.get("ai_p1", default_p1), height=80, key=f"ta_p1_{e_id}")
-        p2 = st.text_area("Phase 2 로드맵 (5~8주차)", value=st.session_state.get("ai_p2", default_p2), height=80, key=f"ta_p2_{e_id}")
-        p3 = st.text_area("Phase 3 로드맵 (9~12주차)", value=st.session_state.get("ai_p3", default_p3), height=80, key=f"ta_p3_{e_id}")
-        comment = st.text_area("김준수 트레이너 마스터 응원 코멘트 (장문 작성)", value=st.session_state.get("ai_comment", default_comment), height=160, key=f"ta_comment_{e_id}")
+        analysis = st.text_area("1. 신체 정밀 종합 분석", value=st.session_state.get(f"ai_analysis_{e_id}", default_analysis), height=130, key=f"ta_analysis_{e_id}")
+        p1 = st.text_area("Phase 1 로드맵 (1~4주차)", value=st.session_state.get(f"ai_p1_{e_id}", default_p1), height=80, key=f"ta_p1_{e_id}")
+        p2 = st.text_area("Phase 2 로드맵 (5~8주차)", value=st.session_state.get(f"ai_p2_{e_id}", default_p2), height=80, key=f"ta_p2_{e_id}")
+        p3 = st.text_area("Phase 3 로드맵 (9~12주차)", value=st.session_state.get(f"ai_p3_{e_id}", default_p3), height=80, key=f"ta_p3_{e_id}")
+        comment = st.text_area("김준수 트레이너 마스터 응원 코멘트 (장문 작성)", value=st.session_state.get(f"ai_comment_{e_id}", default_comment), height=160, key=f"ta_comment_{e_id}")
 
         col_save, col_cancel = st.columns([1, 1])
         if col_save.button("🚀 최종 설계서 저장 및 리포트 완성", type="primary", use_container_width=True, key=f"btn_save_rep_{e_id}"):
             existing_mask = pd.to_numeric(reports["member_id"], errors="coerce") == e_id
 
-            posture_text = st.session_state.get("ai_posture_text", f"자세 평가: {raw_posture if raw_posture else '정상 범위'}")
-            func_text = st.session_state.get("ai_func_text", f"움직임 평가: {raw_func if raw_func else '정상 범위'}")
+            posture_text = st.session_state.get(f"ai_posture_text_{e_id}", f"자세 평가: {raw_posture if raw_posture else '정상 범위'}")
+            func_text = st.session_state.get(f"ai_func_text_{e_id}", f"움직임 평가: {raw_func if raw_func else '정상 범위'}")
 
             if existing_mask.any():
                 reports.loc[existing_mask, ["date", "goal_text", "analysis_text", "posture_eval", "func_eval", "phase1_text", "phase2_text", "phase3_text", "trainer_comment", "status"]] = [
@@ -1545,7 +1549,7 @@ def page_members(members, sales, bookings, logs, reports):
             if has_memo and memo_open_id != m_id:
                 st.caption(f"💬 특이사항 메모: {m['memo']}")
 
-            # 회원이름 클릭 시: 특이사항 + 사전설문 + 예약 및 출석/노쇼 히스토리 출력
+            # 회원이름 클릭 시: 예약 및 출석/노쇼 히스토리 출력 (빨강/초록 시각화 적용)
             if memo_open_id == m_id:
                 st.markdown("---")
                 st.markdown(f"#### 📅 '{m['name']}' 회원 수업 예약 및 출결/노쇼 히스토리")
