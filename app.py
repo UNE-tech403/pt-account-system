@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (매출 동기화 & 실시간 시간대 엄격 필터링 적용)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (날짜 자동 리셋 & RPE 완전 제거 반영 버전)
 ================================================================================
 """
 
@@ -136,7 +136,9 @@ MEMBERS_COLUMNS = [
     "tr_expect", "re_status", "week_group", "memo", "survey_json",
     "exp_re_sessions", "exp_re_price", "is_exp_configured"
 ]
-LOGS_COLUMNS = ["log_id", "member_id", "date", "start_time", "end_time", "exercises_json", "good_points", "improve_points", "rpe_avg", "sent", "attendance"]
+
+# RPE 항목 제거 반영 컬럼 정의
+LOGS_COLUMNS = ["log_id", "member_id", "date", "start_time", "end_time", "exercises_json", "good_points", "improve_points", "sent", "attendance"]
 INBODY_COLUMNS = ["record_id", "member_id", "date", "weight", "skeletal_muscle", "body_fat_pct"]
 SALES_COLUMNS = ["sale_id", "member_id", "date", "product_name", "amount", "pay_type"]
 REPORTS_COLUMNS = [
@@ -152,31 +154,32 @@ RE_STATUS_OPTIONS = ["결제완료", "결제예정", "이월", "이탈", "전월
 TIME_SLOTS = [f"{h:02d}:00" for h in range(6, 23)]
 WEEKDAY_LABELS_KR = ["일", "월", "화", "수", "목", "금", "토"]
 
+# RPE 항목 제거 프리셋 루틴
 PRESET_ROUTINES_DF = {
     "가슴": pd.DataFrame([
-        {"종목": "벤치프레스", "중량(kg)": 40.0, "횟수": 10, "세트": 4, "RPE": 7.0},
-        {"종목": "인클라인 덤벨프레스", "중량(kg)": 12.0, "횟수": 12, "세트": 3, "RPE": 7.0},
-        {"종목": "케이블 크로스오버", "중량(kg)": 10.0, "횟수": 15, "세트": 3, "RPE": 6.0},
+        {"종목": "벤치프레스", "중량(kg)": 40.0, "횟수": 10, "세트": 4},
+        {"종목": "인클라인 덤벨프레스", "중량(kg)": 12.0, "횟수": 12, "세트": 3},
+        {"종목": "케이블 크로스오버", "중량(kg)": 10.0, "횟수": 15, "세트": 3},
     ]),
     "등": pd.DataFrame([
-        {"종목": "랫풀다운", "중량(kg)": 35.0, "횟수": 12, "세트": 4, "RPE": 7.0},
-        {"종목": "시티드 로우", "중량(kg)": 35.0, "횟수": 12, "세트": 3, "RPE": 7.0},
-        {"종목": "루마니안 데드리프트", "중량(kg)": 50.0, "횟수": 8, "세트": 3, "RPE": 8.0},
+        {"종목": "랫풀다운", "중량(kg)": 35.0, "횟수": 12, "세트": 4},
+        {"종목": "시티드 로우", "중량(kg)": 35.0, "횟수": 12, "세트": 3},
+        {"종목": "루마니안 데드리프트", "중량(kg)": 50.0, "횟수": 8, "세트": 3},
     ]),
     "어깨": pd.DataFrame([
-        {"종목": "오버헤드 숄더프레스", "중량(kg)": 15.0, "횟수": 10, "세트": 4, "RPE": 7.0},
-        {"종목": "사이드 레터럴 레이즈", "중량(kg)": 5.0, "횟수": 15, "세트": 4, "RPE": 6.0},
-        {"종목": "페이스풀", "중량(kg)": 15.0, "횟수": 15, "세트": 3, "RPE": 7.0},
+        {"종목": "오버헤드 숄더프레스", "중량(kg)": 15.0, "횟수": 10, "세트": 4},
+        {"종목": "사이드 레터럴 레이즈", "중량(kg)": 5.0, "횟수": 15, "세트": 4},
+        {"종목": "페이스풀", "중량(kg)": 15.0, "횟수": 15, "세트": 3},
     ]),
     "하체": pd.DataFrame([
-        {"종목": "바벨 스쿼트", "중량(kg)": 40.0, "횟수": 10, "세트": 4, "RPE": 7.0},
-        {"종목": "레그 프레스", "중량(kg)": 80.0, "횟수": 12, "세트": 3, "RPE": 7.0},
-        {"종목": "레그 익스텐션", "중량(kg)": 25.0, "횟수": 15, "세트": 3, "RPE": 8.0},
+        {"종목": "바벨 스쿼트", "중량(kg)": 40.0, "횟수": 10, "세트": 4},
+        {"종목": "레그 프레스", "중량(kg)": 80.0, "횟수": 12, "세트": 3},
+        {"종목": "레그 익스텐션", "중량(kg)": 25.0, "횟수": 15, "세트": 3},
     ]),
     "전신": pd.DataFrame([
-        {"종목": "고블릿 스쿼트", "중량(kg)": 12.0, "횟수": 12, "세트": 3, "RPE": 7.0},
-        {"종목": "푸시업", "중량(kg)": 0.0, "횟수": 12, "세트": 3, "RPE": 7.0},
-        {"종목": "케이블 로우", "중량(kg)": 25.0, "횟수": 12, "세트": 3, "RPE": 7.0},
+        {"종목": "고블릿 스쿼트", "중량(kg)": 12.0, "횟수": 12, "세트": 3},
+        {"종목": "푸시업", "중량(kg)": 0.0, "횟수": 12, "세트": 3},
+        {"종목": "케이블 로우", "중량(kg)": 25.0, "횟수": 12, "세트": 3},
     ]),
 }
 
@@ -338,7 +341,7 @@ def save_data(table_name, df):
     if df.empty: return
     data = df.to_dict(orient="records")
     int_fields = ["member_id", "log_id", "record_id", "sale_id", "report_id", "booking_id", "total_sessions", "remaining_sessions", "session_price", "age", "exp_re_sessions", "exp_re_price", "is_exp_configured", "amount"]
-    float_fields = ["rpe_avg", "weight", "skeletal_muscle", "body_fat_pct"]
+    float_fields = ["weight", "skeletal_muscle", "body_fat_pct"]
     bool_fields = ["sent", "delivered"]
 
     clean_batch = []
@@ -397,7 +400,7 @@ def update_attendance_log(member_id, date_str, start_time_str, end_time_str, att
             new_row = {
                 "log_id": new_id, "member_id": member_id, "date": date_str,
                 "start_time": start_time_str, "end_time": end_time_str, "exercises_json": "[]",
-                "good_points": f"수업 {att_value} 처리", "improve_points": "", "rpe_avg": 7.0,
+                "good_points": f"수업 {att_value} 처리", "improve_points": "",
                 "sent": False, "attendance": att_value
             }
             logs_df = pd.concat([logs_df, pd.DataFrame([new_row])], ignore_index=True)
@@ -414,6 +417,7 @@ def next_id(df, id_col):
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
 
 
+# 카카오톡 메시지에서 RPE 문구 제거
 def generate_friendly_message_from_data(member_name, exercises_df, good, improve):
     ex_summary = []
     if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
@@ -423,8 +427,7 @@ def generate_friendly_message_from_data(member_name, exercises_df, good, improve
                 w = safe_float(row.get("중량(kg)", 0))
                 c = int(safe_float(row.get("횟수", 0)))
                 s = int(safe_float(row.get("세트", 0)))
-                rpe = safe_float(row.get("RPE", 7))
-                ex_summary.append(f"  • {item}: {w}kg x {c}회 x {s}세트 (RPE {rpe})")
+                ex_summary.append(f"  • {item}: {w}kg x {c}회 x {s}세트")
 
     ex_text = "\n".join(ex_summary) if ex_summary else "  • 전신 기초 가동성 및 코어 훈련"
     g_text = good if good else "오늘도 설정한 운동 목표 루틴을 깔끔하게 완수하셨습니다!"
@@ -721,7 +724,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
                         </div>
                         <div style="text-align:right;">
                             <div style="font-weight:800; color:{COLOR_BLUE};">⏰ {l['date']} ({l['start_time']} ~ {l['end_time']})</div>
-                            <div style="font-size:12px; color:#64748B; margin-top:2px;">평균 RPE : {l.get('rpe_avg', 7.0)}</div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -789,7 +791,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("#### 📅 수업 일정 달력 및 일별 출석/결석 스케줄")
 
-    # 달력 기본 연/월/날짜 동기화
+    # 달력 기본 연/월/날짜를 현재 실시간 시각으로 세팅
     st.session_state["dash_cal_year"] = today.year
     st.session_state["dash_cal_month"] = today.month
     if "dash_selected_date" not in st.session_state or st.session_state["dash_selected_date"] < today.isoformat():
@@ -935,18 +937,20 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (현재 시간 기준 지난 시간대 완벽 제거)
+# 5. 페이지: 수업 등록 (현재 시각 기반 날짜/시간 엄격 자동 세팅)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
 
     today = date.today()
+    today_str = today.isoformat()
+    
+    # [수정 1] 달력의 선택 날짜를 항상 실시간 '오늘 날짜'로 초기화 및 보정
     st.session_state["cal_year"] = today.year
     st.session_state["cal_month"] = today.month
     
-    # [수정 2] 선택 날짜가 없거나 지나간 날짜라면 오늘 날짜로 자동 동기화
-    if "selected_cal_date" not in st.session_state or st.session_state["selected_cal_date"] < today.isoformat():
-        st.session_state["selected_cal_date"] = today.isoformat()
+    if "selected_cal_date" not in st.session_state or st.session_state["selected_cal_date"] < today_str:
+        st.session_state["selected_cal_date"] = today_str
 
     year = st.session_state["cal_year"]
     month = st.session_state["cal_month"]
@@ -990,14 +994,15 @@ def page_booking(members, bookings):
             this_date = date(year, month, day_num).isoformat()
             day_count = len(active_bookings[active_bookings["date"] == this_date])
             is_selected = (this_date == st.session_state["selected_cal_date"])
-            is_today = (this_date == today.isoformat())
+            is_today = (this_date == today_str)
 
             if day_count > 0:
                 label = f"🟢 {day_num}일 ({day_count}건)"
             else:
                 label = f"{day_num}"
 
-            if is_today and not is_selected:
+            # 오늘 날짜에만 📌 핀 표시
+            if is_today:
                 label = f"📌 {label}"
 
             btn_type = "primary" if is_selected else "secondary"
@@ -1042,16 +1047,15 @@ def page_booking(members, bookings):
         st.markdown("---")
         st.markdown("##### ➕ 신규 수업 예약 등록")
 
-        # [수정 1] 현재 '시(Hour)' 기준 지나버린 모든 시간대 엄격 제외
+        # [수정 3] 현재 시각 기준 지나간 정시(Hour) 및 과거 시간대 완벽 필터링
         now_dt = datetime.now()
-        today_str = date.today().isoformat()
         
         valid_slots = []
         for slot in TIME_SLOTS:
             sh, sm = map(int, slot.split(":"))
             
             if sel_date == today_str:
-                # 현재 시각의 Hour보다 큰 정시 시간대만 노출 (ex: 08:21 -> sh > 8 인 09:00부터 허용)
+                # 현재 시각의 '시(Hour)'보다 큰 시간대만 드롭다운에 추가 (ex: 08:21이면 09:00부터)
                 if sh > now_dt.hour:
                     valid_slots.append(slot)
             elif sel_date > today_str:
@@ -1528,7 +1532,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성
+# 8. 페이지: 수업일지 작성 (RPE 컬럼 완벽 제거)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1574,8 +1578,9 @@ def page_journal(members, logs):
         rerun()
 
     if "exercise_rows_df" not in st.session_state:
-        st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "바벨 스쿼트", "중량(kg)": 40.0, "횟수": 10, "세트": 4, "RPE": 7.0}])
+        st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "바벨 스쿼트", "중량(kg)": 40.0, "횟수": 10, "세트": 4}])
 
+    # RPE 컬럼을 제거한 data_editor
     edited_df = st.data_editor(st.session_state["exercise_rows_df"], num_rows="dynamic", use_container_width=True)
     st.session_state["exercise_rows_df"] = edited_df
 
@@ -1607,14 +1612,12 @@ def page_journal(members, logs):
             st.error("잔여 세션이 없습니다.")
         else:
             valid_rows = edited_df[edited_df["종목"].astype(str).str.strip() != ""]
-            rpe_avg = pd.to_numeric(valid_rows["RPE"], errors="coerce").mean() if not valid_rows.empty else 7.0
 
             new_log = {
                 "log_id": next_id(logs, "log_id"), "member_id": m_id, "date": log_date.isoformat(),
                 "start_time": start_time_sel, "end_time": end_time_sel,
                 "exercises_json": valid_rows.to_json(orient="records", force_ascii=False),
                 "good_points": good_points, "improve_points": improve_points,
-                "rpe_avg": round(float(rpe_avg), 1) if pd.notna(rpe_avg) else 7.0,
                 "sent": False, "attendance": "출석"
             }
             logs = pd.concat([logs, pd.DataFrame([new_log])], ignore_index=True)
@@ -1623,7 +1626,7 @@ def page_journal(members, logs):
             members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = int(member["remaining_sessions"]) - 1
             save_members(members)
 
-            st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "", "중량(kg)": 0.0, "횟수": 0, "세트": 0, "RPE": 0.0}])
+            st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "", "중량(kg)": 0.0, "횟수": 0, "세트": 0}])
             st.session_state["log_saved_success"] = True
             rerun()
 
@@ -1692,7 +1695,7 @@ def page_members(members, sales, bookings, logs, reports):
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         save_members(members)
 
-                        # [문제 1 해결] 매출 데이터 생성 후 세션 스토리지 및 DB에 일괄 동기화
+                        # 매출 데이터 생성 및 세션 상태 즉시 연동
                         new_s = {
                             "sale_id": next_id(sales, "sale_id"), 
                             "member_id": new_m_id, 
@@ -1869,7 +1872,7 @@ def page_members(members, sales, bookings, logs, reports):
     with tab2:
         st.subheader("💰 월별 매출 통합 분석")
         
-        # [문제 1 해결] 세션 상태의 저장소에서 직접 로드하여 실시간 동기화
+        # 실시간 매출 데이터프레임 매핑
         current_sales = st.session_state.get("sales_df", sales)
         
         if current_sales.empty:
