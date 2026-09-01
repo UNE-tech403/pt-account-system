@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (대시보드 상세조회 & 과거예약 방지 고도화)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (현재 시각 기준 예약 시간대 자동 필터링 적용 버전)
 ================================================================================
 """
 
@@ -596,7 +596,7 @@ def build_4step_report_html(member, report):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드 (지표 카드 클릭시 상세 리스트 노출)
+# 4. 페이지 1: 센터 대시보드
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -620,7 +620,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
     if "dash_selected_metric" not in st.session_state:
         st.session_state["dash_selected_metric"] = None
 
-    # [요청 반영] 클릭 시 리스트 노출을 위한 대시보드 metric 버튼 구현
     cols = st.columns(5)
     
     with cols[0]:
@@ -653,7 +652,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
             st.session_state["dash_selected_metric"] = "sales" if st.session_state["dash_selected_metric"] != "sales" else None
             rerun()
 
-    # [요청 반영] 지표 버튼 클릭 시 하단에 노출되는 상세 리스트 영역
     sel_metric = st.session_state.get("dash_selected_metric")
     if sel_metric:
         st.write("")
@@ -868,7 +866,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (과거 시점 예약 방지 반영)
+# 5. 페이지: 수업 등록 (현재 시간 기준 과거 시간대 옵션 제거)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
@@ -876,7 +874,6 @@ def page_booking(members, bookings):
     if "cal_year" not in st.session_state: st.session_state["cal_year"] = date.today().year
     if "cal_month" not in st.session_state: st.session_state["cal_month"] = date.today().month
     if "selected_cal_date" not in st.session_state: st.session_state["selected_cal_date"] = date.today().isoformat()
-    if "selected_slot" not in st.session_state: st.session_state["selected_slot"] = "10:00"
 
     year = st.session_state["cal_year"]
     month = st.session_state["cal_month"]
@@ -972,28 +969,38 @@ def page_booking(members, bookings):
         st.markdown("---")
         st.markdown("##### ➕ 신규 수업 예약 등록")
 
-        col_p1, col_p2 = st.columns([1.5, 3])
+        # [요청 반영] 현재 시간 기준 지나간 시간대 옵션 제거 로직
+        now_dt = datetime.now()
+        today_str = date.today().isoformat()
+        
+        valid_slots = []
+        for slot in TIME_SLOTS:
+            sh, sm = map(int, slot.split(":"))
+            slot_dt = datetime.strptime(sel_date, "%Y-%m-%d").replace(hour=sh, minute=sm)
+            # 오늘 날짜인 경우 현재 시각 이후의 시간대만 추가 (미래 날짜는 전체 허용)
+            if sel_date == today_str:
+                if slot_dt >= now_dt:
+                    valid_slots.append(slot)
+            elif sel_date > today_str:
+                valid_slots.append(slot)
 
-        with col_p1:
-            sel_slot = st.selectbox("시간대 선택", TIME_SLOTS, index=4, key="booking_time_selector_new")
+        if not valid_slots:
+            st.warning(f"⚠️ {sel_date}의 예약 가능한 남은 운영 시간대가 없습니다.")
+        else:
+            col_p1, col_p2 = st.columns([1.5, 3])
 
-        with col_p2:
-            search_q = st.text_input("회원 검색", placeholder="이름을 입력하세요", key="booking_search_input_new")
-            candidates = members[members["name"].astype(str).str.contains(search_q, na=False)] if search_q else members
+            with col_p1:
+                sel_slot = st.selectbox("시간대 선택", valid_slots, index=0, key="booking_time_selector_new")
 
-            if not candidates.empty:
-                cand_options = candidates.apply(lambda m: f"{m['name']} ({m.get('gender','남성')}, 잔여 {int(pd.to_numeric(m['remaining_sessions'], errors='coerce') or 0)}회)", axis=1).tolist()
-                cand_idx = st.selectbox("예약할 회원 선택", range(len(cand_options)), format_func=lambda i: cand_options[i], key="cand_select_new")
+            with col_p2:
+                search_q = st.text_input("회원 검색", placeholder="이름을 입력하세요", key="booking_search_input_new")
+                candidates = members[members["name"].astype(str).str.contains(search_q, na=False)] if search_q else members
 
-                if st.button("✅ 선택한 시간으로 수업 예약 확정", type="primary", use_container_width=True):
-                    # [요청 반영] 과거 시점 수업 예약 방지 검증 로직
-                    now = datetime.now()
-                    slot_hour, slot_minute = map(int, sel_slot.split(":"))
-                    target_dt = datetime.strptime(sel_date, "%Y-%m-%d").replace(hour=slot_hour, minute=slot_minute)
+                if not candidates.empty:
+                    cand_options = candidates.apply(lambda m: f"{m['name']} ({m.get('gender','남성')}, 잔여 {int(pd.to_numeric(m['remaining_sessions'], errors='coerce') or 0)}회)", axis=1).tolist()
+                    cand_idx = st.selectbox("예약할 회원 선택", range(len(cand_options)), format_func=lambda i: cand_options[i], key="cand_select_new")
 
-                    if target_dt < now:
-                        st.error(f"⚠️ 예약할 수 없습니다! 이미 지나간 시점({target_dt.strftime('%Y-%m-%d %H:%M')})의 수업은 예약 등록이 불가합니다.")
-                    else:
+                    if st.button("✅ 선택한 시간으로 수업 예약 확정", type="primary", use_container_width=True):
                         dup_check = active_bookings[(active_bookings["date"] == sel_date) & (active_bookings["time_slot"] == sel_slot)]
                         if not dup_check.empty:
                             st.error("⚠️ 예약할 수 없습니다! 해당 날짜와 시간대에 이미 등록된 수업이 있습니다.")
