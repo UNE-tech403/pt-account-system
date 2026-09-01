@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 완벽 동기화 완료 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (AI 톤앤매너 정밀 교정 버전)
 ================================================================================
 """
 
@@ -239,27 +239,38 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 '{t}' 요소를 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
+# 전문적 톤앤매너 텍스트 변환기 고도화
 def refine_raw_text(text):
     if not text:
-        return "체형 밸런스 개선 및 안정적인 코어 정렬 확보"
+        return "체형 밸런스 개선 및 안정적인 신체 정렬 확보"
     
     t = str(text).strip()
+    
     replacements = [
-        (r"자극점.*타겟.*좋음|자극.*좋음|타겟.*좋음", "목표 주동근의 정확한 자극점을 인지하고 수축 자극을 효율적으로 전달하셨습니다."),
-        (r"안정성.*필요|몸.*흔들림|흔들림.*필요", "동작 수행 시 코어 및 중심부 지지력을 향상시켜 움직임의 안정성을 더욱 높여나가겠습니다."),
-        (r"처음.*자세.*잘\s*잡힘|처음인데.*잘함|자세\s*좋음", "첫 운동 진행임에도 불구하고 관절 정렬과 올바른 운동 궤적을 훌륭하게 이끌어 내셨습니다."),
-        (r"매체.*정보.*힘들어하셨음|이상한\s*정보|잘못된\s*운동\s*정보", "체계적이고 올바른 운동 정보 체득 및 신체 인지 능력 향상"),
-        (r"복압\s*형성\s*미비|복압\s*미비|복압\s*약함", "복부 내압(Core Intra-abdominal Pressure) 유지 능력 강화 및 호흡 정렬 개선"),
-        (r"체중\s*안\s*늘어서|체중\s*늘리고\s*싶어하심|살\s*찌우고\s*싶어함", "체지방 증가 최소화 기반의 점진적 골격근량 증량 및 체중 증대"),
+        # 근육 및 움직임 가동성 관련
+        (r"대퇴근.*타이트.*안나옴|대퇴근.*타이트|타이트.*안나옴|움직임.*안나옴", "대퇴사두근 및 주변 근막의 긴장으로 인한 관절 가동 범위(ROM) 제한"),
+        (r"라운드숄더|말린어깨|어깨.*말림", "상체 경추 및 흉추부 굴곡으로 인한 라운드 숄더 불균형"),
+        (r"전방경사.*관찰됨|전방경사", "골반 전방 경사(Pelvic Anterior Tilt) 패턴으로 인한 허리 하중 집중"),
+        (r"후방경사", "골반 후방 경사(Pelvic Posterior Tilt)에 따른 코어 복압 저하"),
+        (r"스쿼트.*하체운동|스쿼트", "하체 하중 분산 및 골격근 지지력 향상 훈련"),
+        (r"자극점.*타겟.*좋음|자극.*좋음|타겟.*좋음", "목표 주동근의 정확한 자극점 전달 및 활성화"),
+        (r"안정성.*필요|몸.*흔들림|흔들림.*필요", "동작 수행 시 중심부 지지력을 향상시켜 움직임의 안정성 확보"),
+        (r"처음.*자세.*잘\s*잡힘|처음인데.*잘함|자세\s*좋음", "올바른 관절 정렬과 신체 인지 능력 기반의 안정적인 궤적 형성"),
+        (r"복압\s*형성\s*미비|복압\s*미비|복압\s*약함", "복부 내압(Core Intra-abdominal Pressure) 유지 능력 보완"),
+        (r"체중\s*안\s*늘어서|체중\s*늘리고\s*싶어하심|살\s*찌우고\s*싶어함", "체지방 증가 최소화 기반 점진적 골격근량 증량 및 체중 증대"),
         (r"다이어트|살\s*빼고\s*싶어함|체지방\s*감량", "체지방 순감량 및 신체 밸런스 라인 형성"),
         (r"오다리|O다리|오다리교정", "하체 하중 분산 및 휜 다리(내반슬) 체형 밸런스 교정"),
-        (r"허리/골반\s*불균형|골반\s*기울임|전방경사|후방경사", "골반 및 척추의 가동 정렬 불균형 교정"),
-        (r"목과\s*어깨\s*주변\s*뭉침|어깨\s*뭉침", "경추 및 상체 긴장근 이완 및 관절 정상 ROM 확보"),
+        (r"허리/골반\s*불균형|골반\s*기울임", "골반 및 척추의 가동 정렬 불균형 교정"),
+        (r"목과\s*어깨\s*주변\s*뭉침|어깨\s*뭉침", "경추 및 상체 긴장근 이완 및 관절 정상 가동 범위 확보"),
         (r"무릎\s*안쪽\s*쏠림|무릎\s*쏠림", "하체 하중 분산 및 무릎 내반 정렬 안정화"),
-        (r"승모근\s*힘\s*개입|승모근\s*개입", "상체 운동 시 승모근 보상 작용 차단 및 주동근 고립"),
+        (r"승모근\s*힘\s*개입|승모근\s*개입", "상체 운동 시 승모근 보상 작용 차단 및 타겟근 고립"),
     ]
+    
     for pattern, repl in replacements:
-        t = re.sub(pattern, repl, t)
+        if re.search(pattern, t):
+            t = re.sub(pattern, repl, t)
+            break
+            
     t = re.sub(r"\s+", " ", t).strip()
     return t if t else text
 
@@ -326,13 +337,11 @@ def save_bookings(df): save_data("bookings", df)
 
 def update_attendance_log(member_id, date_str, start_time_str, end_time_str, att_value):
     try:
-        # 기존 기록 존재 여부 체크
         res = supabase.table("logs").select("*").eq("member_id", member_id).eq("date", date_str).eq("start_time", start_time_str).execute()
         if res.data and len(res.data) > 0:
             log_id = res.data[0]["log_id"]
             supabase.table("logs").update({"attendance": att_value}).eq("log_id", log_id).execute()
         else:
-            # 새 출결 기록 생성
             logs_df = load_logs()
             new_id = next_id(logs_df, "log_id")
             new_row = {
@@ -666,7 +675,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     m_name = b_row.get("name") or "회원"
                     m_gender = b_row.get("gender") or "남성"
                     
-                    # 날짜 + 시작시간 정밀 매칭
                     m_log = logs[
                         (logs["date"].astype(str) == sel_date_str) & 
                         (pd.to_numeric(logs["member_id"], errors="coerce") == m_id) & 
@@ -1065,7 +1073,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서
+# 7. 페이지: AI 내 몸 변화 설계서 (AI 정제 문장 정밀 교정)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1190,6 +1198,7 @@ def page_bodyplan(members, reports):
             key=f"input_func_{e_id}"
         )
 
+        # AI 전문 톤앤매너 정제 생성 버튼
         if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
             refined_goal = refine_raw_text(goal_input)
             refined_journal = refine_raw_text(raw_journal)
@@ -1241,8 +1250,8 @@ def page_bodyplan(members, reports):
         if col_save.button("🚀 최종 설계서 저장 및 리포트 완성", type="primary", use_container_width=True, key=f"btn_save_rep_{e_id}"):
             existing_mask = pd.to_numeric(reports["member_id"], errors="coerce") == e_id
 
-            posture_text = st.session_state.get(f"ai_posture_text_{e_id}", f"자세 평가: {raw_posture if raw_posture else '정상 범위'}")
-            func_text = st.session_state.get(f"ai_func_text_{e_id}", f"움직임 평가: {raw_func if raw_func else '정상 범위'}")
+            posture_text = st.session_state.get(f"ai_posture_text_{e_id}", f"자세 평가: {refine_raw_text(raw_posture)}")
+            func_text = st.session_state.get(f"ai_func_text_{e_id}", f"움직임 평가: {refine_raw_text(raw_func)}")
 
             if existing_mask.any():
                 reports.loc[existing_mask, ["date", "goal_text", "analysis_text", "posture_eval", "func_eval", "phase1_text", "phase2_text", "phase3_text", "trainer_comment", "status"]] = [
