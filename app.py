@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (Supabase DB 연동 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (Supabase DB 연동 수정 버전)
 ================================================================================
 """
 
@@ -261,7 +261,7 @@ def refine_raw_text(text):
 
 
 # =========================================================
-# 2. Supabase DB 전용 데이터 관리 함수
+# 2. Supabase DB 전용 데이터 관리 함수 (타입 캐스팅 완전 보완)
 # =========================================================
 def load_data(table_name, columns):
     try:
@@ -291,9 +291,16 @@ def load_bookings(): return load_data("bookings", BOOKINGS_COLUMNS)
 def save_data(table_name, df):
     if df.empty: return
     data = df.to_dict(orient="records")
+    int_fields = ["member_id", "log_id", "record_id", "sale_id", "report_id", "booking_id", "total_sessions", "remaining_sessions", "session_price", "age", "exp_re_sessions", "exp_re_price", "is_exp_configured", "amount"]
     for row in data:
-        # NaN / None 값 정리
-        clean_row = {k: (None if pd.isna(v) else v) for k, v in row.items()}
+        clean_row = {}
+        for k, v in row.items():
+            if pd.isna(v) or v is None:
+                clean_row[k] = None
+            elif k in int_fields:
+                clean_row[k] = int(float(v))
+            else:
+                clean_row[k] = v
         supabase.table(table_name).upsert(clean_row).execute()
 
 def save_members(df): save_data("members", df)
@@ -619,11 +626,11 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     sh, sm = map(int, s_time.split(":"))
                     e_time = (datetime(2026, 1, 1, sh, sm) + timedelta(minutes=50)).strftime("%H:%M")
                     
-                    m_id = b_row["member_id"]
+                    m_id = int(b_row["member_id"])
                     m_name = b_row.get("name") or "회원"
                     m_gender = b_row.get("gender") or "남성"
                     
-                    m_log = logs[(logs["date"] == sel_date_str) & (logs["member_id"] == m_id)]
+                    m_log = logs[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id)]
                     att_status = m_log.iloc[0].get("attendance") if not m_log.empty else "미체크"
                     
                     g_badge = get_gender_badge_html(m_gender)
@@ -652,7 +659,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                             }
                             logs = pd.concat([logs, pd.DataFrame([new_l])], ignore_index=True)
                         else:
-                            logs.loc[(logs["date"] == sel_date_str) & (logs["member_id"] == m_id), "attendance"] = "출석"
+                            logs.loc[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id), "attendance"] = "출석"
                         save_logs(logs)
                         st.toast(f"{m_name} 회원 출석 처리 완료")
                         rerun()
@@ -666,7 +673,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                             }
                             logs = pd.concat([logs, pd.DataFrame([new_l])], ignore_index=True)
                         else:
-                            logs.loc[(logs["date"] == sel_date_str) & (logs["member_id"] == m_id), "attendance"] = "결석"
+                            logs.loc[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id), "attendance"] = "결석"
                         save_logs(logs)
                         st.toast(f"{m_name} 회원 결석 처리 완료")
                         rerun()
@@ -814,7 +821,7 @@ def page_booking(members, bookings):
                         chosen = candidates.iloc[cand_idx]
                         new_booking = {
                             "booking_id": next_id(bookings, "booking_id"),
-                            "member_id": chosen["member_id"], "date": sel_date,
+                            "member_id": int(chosen["member_id"]), "date": sel_date,
                             "time_slot": sel_slot, "status": "예약됨",
                         }
                         bookings = pd.concat([bookings, pd.DataFrame([new_booking])], ignore_index=True)
@@ -956,7 +963,7 @@ def page_re_registration(members, sales):
     week_options_dynamic = ["전월이월"] + curr_weeks + ["노카테고리", "전월이탈"]
 
     for idx, m in members.iterrows():
-        m_id = m["member_id"]
+        m_id = int(m["member_id"])
         rem = safe_int(m.get("remaining_sessions"), 0)
         
         tr_exp_val = str(m.get("tr_expect", "")).strip()
@@ -1013,15 +1020,15 @@ def page_re_registration(members, sales):
             ec3.write("")
             ec3.write("")
             if ec3.button("예상가 설정 저장", key=f"cfg_exp_save_{m_id}", type="primary", use_container_width=True):
-                members.loc[members["member_id"] == m_id, "exp_re_sessions"] = new_exp_s
-                members.loc[members["member_id"] == m_id, "exp_re_price"] = new_exp_p
-                members.loc[members["member_id"] == m_id, "is_exp_configured"] = 1
+                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "exp_re_sessions"] = new_exp_s
+                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "exp_re_price"] = new_exp_p
+                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "is_exp_configured"] = 1
                 save_members(members)
                 st.toast(f"'{m['name']}' 회원의 예상 재등록 금액 설정이 저장되었습니다.")
                 rerun()
 
         if n_exp != TR_EXPECT_OPTIONS[idx_exp] or n_re != RE_STATUS_OPTIONS[idx_re] or n_wk != week_options_dynamic[idx_wk]:
-            members.loc[members["member_id"] == m_id, ["tr_expect", "re_status", "week_group"]] = [n_exp, n_re, n_wk]
+            members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, ["tr_expect", "re_status", "week_group"]] = [n_exp, n_re, n_wk]
             save_members(members)
             st.toast(f"'{m['name']}' 회원의 재등록 상태가 수정되었습니다.")
             rerun()
@@ -1030,7 +1037,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서
+# 7. 페이지: AI 내 몸 변화 설계서 (체크박스 및 개별회원 폼 버그 해결)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1042,31 +1049,37 @@ def page_bodyplan(members, reports):
     st.subheader("회원 리스트 및 설계서 작성")
 
     for idx, m in members.iterrows():
-        m_id = m["member_id"]
-        target_r = reports[reports["member_id"] == m_id]
+        m_id = int(m["member_id"])
+        target_r = reports[pd.to_numeric(reports["member_id"], errors="coerce") == m_id]
         
         has_report = not target_r.empty and str(target_r.iloc[0].get("status")) == "작성완료"
         
         if has_report:
             rep_status_html = '<b style="color:#166534;">🟢 작성완료</b>'
-            is_delivered = bool(target_r.iloc[0].get("delivered", False))
-            deliv_badge = "✅ 전달완료" if is_delivered else "⏳ 미전달"
-            deliv_color = "#166534" if is_delivered else "#854D0E"
-            deliv_html = f'(<b style="color:{deliv_color};">{deliv_badge}</b>)'
         else:
             rep_status_html = '<b style="color:#DC2626;">🔴 미작성</b>'
-            deliv_html = ""
 
         g_badge = get_gender_badge_html(m.get("gender"))
 
-        col_a, col_b, col_c = st.columns([3, 1.2, 1])
+        st.markdown('<div class="pt-card" style="margin-bottom:12px;">', unsafe_allow_html=True)
+        col_deliv, col_a, col_b, col_c = st.columns([0.8, 2.5, 1.2, 1])
+
+        with col_deliv:
+            if has_report:
+                is_deliv_curr = bool(target_r.iloc[0].get("delivered", False))
+                cb_deliv = st.checkbox("✅ 전달 완료", value=is_deliv_curr, key=f"cb_card_deliv_{m_id}_{idx}")
+                if cb_deliv != is_deliv_curr:
+                    reports.loc[pd.to_numeric(reports["member_id"], errors="coerce") == m_id, "delivered"] = cb_deliv
+                    save_reports(reports)
+                    st.toast(f"'{m['name']}' 회원의 설계서 전달 상태가 변경되었습니다.")
+                    rerun()
+            else:
+                st.caption("⏳ 미작성")
+
         with col_a:
-            st.markdown(f"""
-            <div class="pt-card" style="margin-bottom:8px;">
-                <b>{m['name']}</b> 회원님 {g_badge} ({m['contact']}) | 담당: {MY_NAME}<br/>
-                <span style="font-size:13px; color:#64748B;">목표: {m.get('goal','-')} | 리포트: {rep_status_html} {deliv_html}</span>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"<b>{m['name']} 회원님</b> {g_badge} ({m['contact']}) | 담당: {MY_NAME}")
+            st.markdown(f"<span style='font-size:13px; color:#64748B;'>목표: {m.get('goal','-')} | 리포트: {rep_status_html}</span>", unsafe_allow_html=True)
+
         with col_b:
             btn_label = "✍️ 설계서 수정" if has_report else "➕ 설계서 작성하기"
             if st.button(btn_label, key=f"btn_write_{m_id}_{idx}", use_container_width=True):
@@ -1079,6 +1092,7 @@ def page_bodyplan(members, reports):
                 st.session_state.pop("ai_p3", None)
                 st.session_state.pop("ai_comment", None)
                 rerun()
+
         with col_c:
             if has_report:
                 if st.button("📄 리포트 보기", key=f"btn_view_{m_id}_{idx}", use_container_width=True):
@@ -1086,23 +1100,16 @@ def page_bodyplan(members, reports):
                     st.session_state["show_modal"] = True
                     rerun()
 
+        st.markdown('</div>', unsafe_allow_html=True)
+
     if st.session_state.get("show_modal", False):
-        m_id = st.session_state.get("selected_member_id")
-        target_m = members[members["member_id"] == m_id].iloc[0]
-        target_r = reports[reports["member_id"] == m_id]
+        m_id = int(st.session_state.get("selected_member_id"))
+        target_m = members[pd.to_numeric(members["member_id"], errors="coerce") == m_id].iloc[0]
+        target_r = reports[pd.to_numeric(reports["member_id"], errors="coerce") == m_id]
         r_dict = target_r.iloc[0].to_dict() if not target_r.empty else {}
 
         st.markdown("---")
         st.subheader(f"📄 '{target_m['name']}' 회원의 내 몸 변화 설계서 미리보기")
-
-        is_deliv_curr = bool(r_dict.get("delivered", False))
-        cb_deliv = st.checkbox("✅ 회원에게 내 몸 변화 설계서 전달 완료함", value=is_deliv_curr, key=f"cb_modal_deliv_{m_id}")
-        
-        if cb_deliv != is_deliv_curr:
-            reports.loc[reports["member_id"] == m_id, "delivered"] = cb_deliv
-            save_reports(reports)
-            st.toast(f"설계서 전달 상태가 '{'전달완료' if cb_deliv else '미전달'}'로 변경되었습니다.")
-            rerun()
 
         preview_html = build_4step_report_html(target_m, r_dict)
 
@@ -1113,7 +1120,7 @@ def page_bodyplan(members, reports):
             st.session_state["show_modal"] = False
             rerun()
         if btn_c2.button("🔄 다시 작성하기", use_container_width=True):
-            supabase.table("reports").delete().eq("member_id", int(m_id)).execute()
+            supabase.table("reports").delete().eq("member_id", m_id).execute()
             st.session_state["editing_member_id"] = m_id
             st.session_state["show_modal"] = False
             rerun()
@@ -1124,36 +1131,40 @@ def page_bodyplan(members, reports):
         components.html(preview_html, height=850, scrolling=True)
 
     if st.session_state.get("editing_member_id"):
-        e_id = st.session_state.get("editing_member_id")
-        selected_m = members[members["member_id"] == e_id].iloc[0]
-        target_r = reports[reports["member_id"] == e_id]
+        e_id = int(st.session_state.get("editing_member_id"))
+        selected_m = members[pd.to_numeric(members["member_id"], errors="coerce") == e_id].iloc[0]
+        target_r = reports[pd.to_numeric(reports["member_id"], errors="coerce") == e_id]
         has_existing = not target_r.empty and str(target_r.iloc[0].get("status")) == "작성완료"
         r_row = target_r.iloc[0] if has_existing else {}
 
         st.markdown("---")
-        st.subheader(f"💡 '{selected_m['name']}' 회원 맞춤 전문 가이드 생성")
+        st.subheader(f"💡 '{selected_m['name']}' 회원 맞춤 전문 가이드 생성 및 작성")
 
         st.markdown('<div class="pt-card">', unsafe_allow_html=True)
 
         goal_input = st.text_input(
             "🎯 회원 운동 목적", 
             value=r_row.get("goal_text") if has_existing else (selected_m.get("goal") or ""),
-            placeholder="예시: 다이어트 및 오다리 체형 교정"
+            placeholder="예시: 다이어트 및 오다리 체형 교정",
+            key=f"input_goal_{e_id}"
         )
         raw_journal = st.text_input(
             "1. 1회차 수업 진행 내용 (운동일지 메모)", 
-            placeholder="예시: 폼롤러 근막이완 및 맨몸 스쿼트 평가, 랫풀다운 자극점 체크 진행"
+            placeholder="예시: 폼롤러 근막이완 및 맨몸 스쿼트 평가, 랫풀다운 자극점 체크 진행",
+            key=f"input_journal_{e_id}"
         )
         raw_posture = st.text_input(
             "2. 자세 체크 결과", 
-            placeholder="예시: 골반 기울임 관찰, 목과 어깨 주변 뭉침 경향"
+            placeholder="예시: 골반 기울임 관찰, 목과 어깨 주변 뭉침 경향",
+            key=f"input_posture_{e_id}"
         )
         raw_func = st.text_input(
             "3. 움직임 체크 결과", 
-            placeholder="예시: 스쿼트 시 무릎 살짝 안쪽 쏠림, 랫풀다운 시 승모근 힘 개입"
+            placeholder="예시: 스쿼트 시 무릎 살짝 안쪽 쏠림, 랫풀다운 시 승모근 힘 개입",
+            key=f"input_func_{e_id}"
         )
 
-        if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary"):
+        if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
             refined_goal = refine_raw_text(goal_input)
             refined_journal = refine_raw_text(raw_journal)
             refined_posture = refine_raw_text(raw_posture)
@@ -1187,15 +1198,15 @@ def page_bodyplan(members, reports):
         default_p3 = r_row.get("phase3_text") if has_existing else ""
         default_comment = r_row.get("trainer_comment") if has_existing else ""
 
-        analysis = st.text_area("1. 신체 정밀 종합 분석", value=st.session_state.get("ai_analysis", default_analysis), height=130)
-        p1 = st.text_area("Phase 1 로드맵 (1~4주차)", value=st.session_state.get("ai_p1", default_p1), height=80)
-        p2 = st.text_area("Phase 2 로드맵 (5~8주차)", value=st.session_state.get("ai_p2", default_p2), height=80)
-        p3 = st.text_area("Phase 3 로드맵 (9~12주차)", value=st.session_state.get("ai_p3", default_p3), height=80)
-        comment = st.text_area("김준수 트레이너 마스터 응원 코멘트 (장문 작성)", value=st.session_state.get("ai_comment", default_comment), height=160)
+        analysis = st.text_area("1. 신체 정밀 종합 분석", value=st.session_state.get("ai_analysis", default_analysis), height=130, key=f"ta_analysis_{e_id}")
+        p1 = st.text_area("Phase 1 로드맵 (1~4주차)", value=st.session_state.get("ai_p1", default_p1), height=80, key=f"ta_p1_{e_id}")
+        p2 = st.text_area("Phase 2 로드맵 (5~8주차)", value=st.session_state.get("ai_p2", default_p2), height=80, key=f"ta_p2_{e_id}")
+        p3 = st.text_area("Phase 3 로드맵 (9~12주차)", value=st.session_state.get("ai_p3", default_p3), height=80, key=f"ta_p3_{e_id}")
+        comment = st.text_area("김준수 트레이너 마스터 응원 코멘트 (장문 작성)", value=st.session_state.get("ai_comment", default_comment), height=160, key=f"ta_comment_{e_id}")
 
         col_save, col_cancel = st.columns([1, 1])
-        if col_save.button("🚀 최종 설계서 저장 및 리포트 완성", type="primary", use_container_width=True):
-            existing_mask = reports["member_id"] == selected_m["member_id"]
+        if col_save.button("🚀 최종 설계서 저장 및 리포트 완성", type="primary", use_container_width=True, key=f"btn_save_rep_{e_id}"):
+            existing_mask = pd.to_numeric(reports["member_id"], errors="coerce") == e_id
 
             posture_text = st.session_state.get("ai_posture_text", f"자세 평가: {raw_posture if raw_posture else '정상 범위'}")
             func_text = st.session_state.get("ai_func_text", f"움직임 평가: {raw_func if raw_func else '정상 범위'}")
@@ -1210,7 +1221,7 @@ def page_bodyplan(members, reports):
             else:
                 new_r_id = next_id(reports, "report_id")
                 new_rep = {
-                    "report_id": new_r_id, "member_id": int(selected_m["member_id"]),
+                    "report_id": new_r_id, "member_id": e_id,
                     "date": date.today().isoformat(),
                     "goal_text": goal_input,
                     "analysis_text": analysis,
@@ -1223,12 +1234,12 @@ def page_bodyplan(members, reports):
 
             save_reports(reports)
             st.session_state["report_saved_toast"] = True
-            st.session_state["selected_member_id"] = selected_m["member_id"]
+            st.session_state["selected_member_id"] = e_id
             st.session_state["show_modal"] = True
             st.session_state["editing_member_id"] = None
             rerun()
 
-        if col_cancel.button("취소", use_container_width=True):
+        if col_cancel.button("취소", use_container_width=True, key=f"btn_cancel_rep_{e_id}"):
             st.session_state["editing_member_id"] = None
             rerun()
 
@@ -1255,6 +1266,7 @@ def page_journal(members, logs):
     idx = st.selectbox("회원 선택", range(len(options)), index=default_sel, format_func=lambda i: options[i])
     st.session_state["current_journal_member_idx"] = idx
     member = members.iloc[idx]
+    m_id = int(member["member_id"])
 
     c1, c2, c3 = st.columns(3)
     c1.metric("총 세션", int(member["total_sessions"]))
@@ -1321,7 +1333,7 @@ def page_journal(members, logs):
             rpe_avg = pd.to_numeric(valid_rows["RPE"], errors="coerce").mean() if not valid_rows.empty else 7.0
 
             new_log = {
-                "log_id": next_id(logs, "log_id"), "member_id": int(member["member_id"]), "date": log_date.isoformat(),
+                "log_id": next_id(logs, "log_id"), "member_id": m_id, "date": log_date.isoformat(),
                 "start_time": start_time_sel, "end_time": end_time_sel,
                 "exercises_json": valid_rows.to_json(orient="records", force_ascii=False),
                 "good_points": good_points, "improve_points": improve_points,
@@ -1331,7 +1343,7 @@ def page_journal(members, logs):
             logs = pd.concat([logs, pd.DataFrame([new_log])], ignore_index=True)
             save_logs(logs)
 
-            members.loc[members["member_id"] == member["member_id"], "remaining_sessions"] = int(member["remaining_sessions"]) - 1
+            members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = int(member["remaining_sessions"]) - 1
             save_members(members)
 
             st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "", "중량(kg)": 0.0, "횟수": 0, "세트": 0, "RPE": 0.0}])
@@ -1424,7 +1436,7 @@ def page_members(members, sales, bookings, logs, reports):
         re_pay_open_id = st.session_state.get("re_pay_open_id")
 
         for idx, m in view.iterrows():
-            m_id = m["member_id"]
+            m_id = int(m["member_id"])
             total = int(pd.to_numeric(m.get("total_sessions", 0), errors="coerce"))
             rem = int(pd.to_numeric(m.get("remaining_sessions", 0), errors="coerce"))
             done = max(0, total - rem)
@@ -1459,22 +1471,22 @@ def page_members(members, sales, bookings, logs, reports):
                 st.write("")
                 if st.button("➖1", key=f"btn_minus_{m_id}_{idx}", use_container_width=True):
                     if rem > 0:
-                        members.loc[members["member_id"] == m_id, "remaining_sessions"] = rem - 1
+                        members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = rem - 1
                         save_members(members)
                         st.toast(f"{m['name']} 회원 세션 -1 차감 완료")
                         rerun()
             with c_btn2:
                 st.write("")
                 if st.button("➕1", key=f"btn_plus_{m_id}_{idx}", use_container_width=True):
-                    members.loc[members["member_id"] == m_id, "remaining_sessions"] = rem + 1
-                    members.loc[members["member_id"] == m_id, "total_sessions"] = total + 1
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = rem + 1
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "total_sessions"] = total + 1
                     save_members(members)
                     st.toast(f"{m['name']} 회원 잔여 및 총 세션 +1 반영 완료")
                     rerun()
             with c_del:
                 st.write("")
                 if st.button("🗑️", key=f"btn_del_mem_{m_id}_{idx}", use_container_width=True):
-                    supabase.table("members").delete().eq("member_id", int(m_id)).execute()
+                    supabase.table("members").delete().eq("member_id", m_id).execute()
                     if memo_open_id == m_id:
                         st.session_state["memo_open_id"] = None
                     st.toast(f"'{m['name']}' 회원의 데이터가 완벽 삭제되었습니다.")
@@ -1493,15 +1505,15 @@ def page_members(members, sales, bookings, logs, reports):
                 re_col4.write("")
                 re_col4.write("")
                 if re_col4.button("💳 결제 저장", key=f"btn_re_confirm_{m_id}", type="primary", use_container_width=True):
-                    members.loc[members["member_id"] == m_id, "total_sessions"] = total + re_sess
-                    members.loc[members["member_id"] == m_id, "remaining_sessions"] = rem + re_sess
-                    members.loc[members["member_id"] == m_id, "session_price"] = re_unit_price
-                    members.loc[members["member_id"] == m_id, "re_status"] = "결제완료"
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "total_sessions"] = total + re_sess
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = rem + re_sess
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "session_price"] = re_unit_price
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "re_status"] = "결제완료"
                     save_members(members)
 
                     new_s = {
                         "sale_id": next_id(sales, "sale_id"),
-                        "member_id": int(m_id),
+                        "member_id": m_id,
                         "date": date.today().isoformat(),
                         "product_name": f"PT {re_sess}회 재등록",
                         "amount": tot_re_amount,
@@ -1548,8 +1560,8 @@ def page_members(members, sales, bookings, logs, reports):
                         "preferred_time": s_preferred_time, "style": s_style
                     }, ensure_ascii=False)
                     
-                    members.loc[members["member_id"] == m_id, "memo"] = str(memo_val)
-                    members.loc[members["member_id"] == m_id, "survey_json"] = str(new_survey_json)
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = str(memo_val)
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "survey_json"] = str(new_survey_json)
                     save_members(members)
                     st.session_state["memo_open_id"] = None
                     st.toast(f"'{m['name']}' 회원의 메모 및 사전 설문지가 저장되었습니다.")
@@ -1589,7 +1601,7 @@ def page_members(members, sales, bookings, logs, reports):
             merged_sales = filtered_sales.merge(members[["member_id", "name", "gender"]], on="member_id", how="left")
             
             for idx, s_row in merged_sales.sort_values("date", ascending=False).iterrows():
-                sale_id = s_row["sale_id"]
+                sale_id = int(s_row["sale_id"])
                 pay_amt = safe_float(s_row['amount_num'])
                 
                 m_name = s_row.get("name")
@@ -1608,7 +1620,7 @@ def page_members(members, sales, bookings, logs, reports):
                 
                 with col_s3:
                     if st.button("🗑️ 삭제", key=f"btn_del_sale_{sale_id}_{idx}", use_container_width=True):
-                        supabase.table("sales").delete().eq("sale_id", int(sale_id)).execute()
+                        supabase.table("sales").delete().eq("sale_id", sale_id).execute()
                         st.toast("해당 매출 내역이 삭제되었습니다.")
                         rerun()
 
@@ -1628,7 +1640,7 @@ def page_inbody(members, inbody):
     options = members.apply(lambda m: f"{m['name']} ({m.get('gender','남성')})", axis=1).tolist()
     idx = st.selectbox("조회할 회원 선택", range(len(options)), format_func=lambda i: options[i])
     selected_m = members.iloc[idx]
-    m_id = selected_m["member_id"]
+    m_id = int(selected_m["member_id"])
 
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.subheader(f"➕ '{selected_m['name']}' 회원 인바디 기록 추가")
@@ -1644,7 +1656,7 @@ def page_inbody(members, inbody):
     if ic5.button("💾 기록 저장", type="primary", use_container_width=True, key=f"in_save_{m_id}"):
         new_rec = {
             "record_id": next_id(inbody, "record_id"),
-            "member_id": int(m_id),
+            "member_id": m_id,
             "date": in_date.isoformat(),
             "weight": in_weight,
             "skeletal_muscle": in_muscle,
@@ -1657,7 +1669,7 @@ def page_inbody(members, inbody):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    m_inbody = inbody[inbody["member_id"] == m_id].sort_values("date")
+    m_inbody = inbody[pd.to_numeric(inbody["member_id"], errors="coerce") == m_id].sort_values("date")
 
     if m_inbody.empty:
         st.info(f"'{selected_m['name']}' 회원의 인바디 측정 기록이 없습니다.")
@@ -1679,7 +1691,7 @@ def page_inbody(members, inbody):
 
         st.markdown("##### 📋 인바디 측정 이력 목록")
         for idx_ib, ib_row in m_inbody.sort_values("date", ascending=False).iterrows():
-            rec_id = ib_row["record_id"]
+            rec_id = int(ib_row["record_id"])
             st.markdown(f"""
             <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 16px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
                 <div>
@@ -1692,7 +1704,7 @@ def page_inbody(members, inbody):
             """, unsafe_allow_html=True)
             
             if st.button("🗑️ 기록 삭제", key=f"del_ib_{rec_id}_{idx_ib}"):
-                supabase.table("inbody").delete().eq("record_id", int(rec_id)).execute()
+                supabase.table("inbody").delete().eq("record_id", rec_id).execute()
                 st.toast("체성분 기록이 삭제되었습니다.")
                 rerun()
 
