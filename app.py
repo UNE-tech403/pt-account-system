@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 완벽 동기화 & 히스토리 추가 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 동기화 및 UI 완벽 개선 버전)
 ================================================================================
 """
 
@@ -89,12 +89,12 @@ CUSTOM_CSS = f"""
     }}
 
     .status-attend {{
-        background-color: #DCFCE7; color: #15803D; padding: 3px 10px;
-        border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid #BBF7D0;
+        background-color: #DCFCE7; color: #15803D; padding: 4px 12px;
+        border-radius: 12px; font-weight: 800; font-size: 13px; border: 1px solid #BBF7D0;
     }}
     .status-absent {{
-        background-color: #FFE4E6; color: #E11D48; padding: 3px 10px;
-        border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid #FECDD3;
+        background-color: #FFE4E6; color: #E11D48; padding: 4px 12px;
+        border-radius: 12px; font-weight: 800; font-size: 13px; border: 1px solid #FECDD3;
     }}
 
     .tr-high {{ background-color: #DCFCE7; color: #166534; padding: 4px 8px; border-radius: 6px; font-weight: 800; }}
@@ -261,7 +261,7 @@ def refine_raw_text(text):
 
 
 # =========================================================
-# 2. Supabase DB 전용 데이터 관리 함수
+# 2. Supabase DB 데이터 관리 함수
 # =========================================================
 def load_data(table_name, columns):
     try:
@@ -367,9 +367,9 @@ def get_gender_badge_html(gender):
 
 def get_attendance_badge_html(status):
     if status == "출석":
-        return '<span class="status-attend">🟢 출석</span>'
-    elif status == "결석":
-        return '<span class="status-absent">🔴 결석(노쇼)</span>'
+        return '<span class="status-attend">🟢 출석 완료</span>'
+    elif status in ["결석", "노쇼"]:
+        return '<span class="status-absent">🔴 노쇼 / 결석</span>'
     return '<span style="color:#64748B;">⏳ 미체크</span>'
 
 
@@ -521,7 +521,7 @@ def build_4step_report_html(member, report):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드 (출결체크 및 동기화 완벽 수정)
+# 4. 페이지 1: 센터 대시보드 (출결 실시간 동기화 완료)
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -640,7 +640,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     m_name = b_row.get("name") or "회원"
                     m_gender = b_row.get("gender") or "남성"
                     
-                    # 수치 타입 동기화 로직 보완
+                    # 수치 비교 완전 보완
                     m_log = logs[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id)]
                     att_status = m_log.iloc[0].get("attendance") if not m_log.empty and pd.notna(m_log.iloc[0].get("attendance")) and str(m_log.iloc[0].get("attendance")).strip() != "" else "미체크"
                     
@@ -671,11 +671,12 @@ def page_dashboard(members, logs, sales, reports, bookings):
                             logs = pd.concat([logs, pd.DataFrame([new_l])], ignore_index=True)
                         else:
                             logs.loc[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id), "attendance"] = "출석"
+                        
                         save_logs(logs)
-                        st.toast(f"{m_name} 회원 출석 처리 완료")
+                        st.toast(f"🎉 {m_name} 회원 출석 처리 완료")
                         rerun()
 
-                    if btn_c2.button("🔴 결석", key=f"dash_abs_btn_{m_id}_{idx}", use_container_width=True):
+                    if btn_c2.button("🔴 결석(노쇼)", key=f"dash_abs_btn_{m_id}_{idx}", use_container_width=True):
                         if m_log.empty:
                             new_l = {
                                 "log_id": next_id(logs, "log_id"), "member_id": m_id, "date": sel_date_str,
@@ -685,8 +686,9 @@ def page_dashboard(members, logs, sales, reports, bookings):
                             logs = pd.concat([logs, pd.DataFrame([new_l])], ignore_index=True)
                         else:
                             logs.loc[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id), "attendance"] = "결석"
+                        
                         save_logs(logs)
-                        st.toast(f"{m_name} 회원 결석 처리 완료")
+                        st.toast(f"🔴 {m_name} 회원 노쇼/결석 처리 완료")
                         rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1048,7 +1050,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서
+# 7. 페이지: AI 내 몸 변화 설계서 (깨진 HTML 태그 완전 제거)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1087,9 +1089,10 @@ def page_bodyplan(members, reports):
             else:
                 st.caption("⏳ 미작성")
 
+        # HTML 깨짐 없이 깔끔하게 이름 출력
         with col_a:
-            st.markdown(f"<b>{m['name']} 회원님</b> {g_badge} ({m['contact']}) | 담당: {MY_NAME}")
-            st.markdown(f"<span style='font-size:13px; color:#64748B;'>목표: {m.get('goal','-')} | 리포트: {rep_status_html}</span>", unsafe_allow_html=True)
+            st.markdown(f"##### **{m['name']} 회원님** &nbsp; {g_badge}", unsafe_allow_html=True)
+            st.caption(f"연락처: {m['contact']} | 담당: {MY_NAME} | 목표: {m.get('goal','-')}")
 
         with col_b:
             btn_label = "✍️ 설계서 수정" if has_report else "➕ 설계서 작성하기"
@@ -1367,7 +1370,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (출석/노쇼 히스토리 기능 추가)
+# 9. 페이지: 회원 관리
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1540,7 +1543,6 @@ def page_members(members, sales, bookings, logs, reports):
             if has_memo and memo_open_id != m_id:
                 st.caption(f"💬 특이사항 메모: {m['memo']}")
 
-            # 회원이름 클릭 시: 특이사항 + 사전설문 + 예약 및 출석/노쇼 히스토리 출력
             if memo_open_id == m_id:
                 st.markdown("---")
                 st.markdown(f"#### 📅 '{m['name']}' 회원 수업 예약 및 출결/노쇼 히스토리")
@@ -1560,8 +1562,8 @@ def page_members(members, sales, bookings, logs, reports):
                         
                         if att_val == "출석":
                             att_disp = "🟢 출석 완료"
-                        elif att_val == "결석":
-                            att_disp = "🔴 결석 (노쇼)"
+                        elif att_val in ["결석", "노쇼"]:
+                            att_disp = "🔴 노쇼 / 결석"
                         else:
                             att_disp = "⏳ 미체크 (예정)"
 
