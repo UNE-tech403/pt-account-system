@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (Supabase DB 연동 수정 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (Supabase DB 완벽 안정화 버전)
 ================================================================================
 """
 
@@ -261,7 +261,7 @@ def refine_raw_text(text):
 
 
 # =========================================================
-# 2. Supabase DB 전용 데이터 관리 함수 (타입 캐스팅 완전 보완)
+# 2. Supabase DB 전용 데이터 관리 함수 (데이터 타입 완벽 캐스팅)
 # =========================================================
 def load_data(table_name, columns):
     try:
@@ -272,7 +272,7 @@ def load_data(table_name, columns):
         for col in columns:
             if col not in df.columns: df[col] = None
             
-        str_cols = ["name", "contact", "memo", "survey_json", "goal", "tr_expect", "re_status", "week_group"]
+        str_cols = ["name", "contact", "memo", "survey_json", "goal", "tr_expect", "re_status", "week_group", "attendance", "status"]
         for sc in str_cols:
             if sc in df.columns:
                 df[sc] = df[sc].fillna("").astype(str)
@@ -292,6 +292,9 @@ def save_data(table_name, df):
     if df.empty: return
     data = df.to_dict(orient="records")
     int_fields = ["member_id", "log_id", "record_id", "sale_id", "report_id", "booking_id", "total_sessions", "remaining_sessions", "session_price", "age", "exp_re_sessions", "exp_re_price", "is_exp_configured", "amount"]
+    float_fields = ["rpe_avg", "weight", "skeletal_muscle", "body_fat_pct"]
+    bool_fields = ["sent", "delivered"]
+
     for row in data:
         clean_row = {}
         for k, v in row.items():
@@ -299,9 +302,16 @@ def save_data(table_name, df):
                 clean_row[k] = None
             elif k in int_fields:
                 clean_row[k] = int(float(v))
+            elif k in float_fields:
+                clean_row[k] = float(v)
+            elif k in bool_fields:
+                clean_row[k] = bool(v)
             else:
-                clean_row[k] = v
-        supabase.table(table_name).upsert(clean_row).execute()
+                clean_row[k] = str(v)
+        try:
+            supabase.table(table_name).upsert(clean_row).execute()
+        except Exception as e:
+            st.error(f"DB 저장 오류 ({table_name}): {e}")
 
 def save_members(df): save_data("members", df)
 def save_logs(df): save_data("logs", df)
@@ -1037,7 +1047,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (체크박스 및 개별회원 폼 버그 해결)
+# 7. 페이지: AI 내 몸 변화 설계서
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
