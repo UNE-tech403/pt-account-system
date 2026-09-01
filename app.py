@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 완벽 강제 동기화 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 완벽 동기화 최종 버전)
 ================================================================================
 """
 
@@ -1055,7 +1055,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (AI 자동 생성 완벽 보완)
+# 7. 페이지: AI 내 몸 변화 설계서 (AI 자동생성 및 렌더링 순서 고침)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1180,7 +1180,7 @@ def page_bodyplan(members, reports):
             key=f"input_func_{e_id}"
         )
 
-        # AI 생성 버튼 클릭 시 텍스트 영역에 강제 삽입
+        # AI 생성 클릭 시 text_area에 즉시 주입되도록 키값 직접 세팅
         if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
             refined_goal = refine_raw_text(goal_input)
             refined_journal = refine_raw_text(raw_journal)
@@ -1553,7 +1553,7 @@ def page_members(members, sales, bookings, logs, reports):
             if has_memo and memo_open_id != m_id:
                 st.caption(f"💬 특이사항 메모: {m['memo']}")
 
-            # 회원이름 클릭 시: 예약 및 출석/노쇼 히스토리 출력 (초록/빨강 배지 반영)
+            # 회원이름 클릭 시: 예약 및 출석/노쇼 히스토리 출력
             if memo_open_id == m_id:
                 st.markdown("---")
                 st.markdown(f"#### 📅 '{m['name']}' 회원 수업 예약 및 출결/노쇼 히스토리")
