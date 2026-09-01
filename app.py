@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (KST 대한민국 시간 기준 엄격 반영)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (달력 UI 직관성 강화 & DB 매출 완전 보장)
 ================================================================================
 """
 
@@ -84,7 +84,7 @@ CUSTOM_CSS = f"""
     div.stButton > button {{ border-radius: 10px; font-weight: 700; }}
 
     .slot-booked {{ background:{COLOR_ICE}; border-radius:8px; padding:12px; font-size:15px; border-left: 4px solid {COLOR_BLUE}; }}
-    .cal-weekday {{ text-align:center; font-weight:800; color:#64748B; font-size:12px; padding-bottom:4px; }}
+    .cal-weekday {{ text-align:center; font-weight:800; color:#64748B; font-size:13px; padding-bottom:6px; }}
 
     .custom-item-card {{
         background: #FFFFFF;
@@ -296,7 +296,7 @@ def refine_raw_text(text):
 
 
 # =========================================================
-# 2. Supabase DB 데이터 관리 함수
+# 2. Supabase DB 데이터 관리 함수 (매출 보장 수정을 반영한 안전 로직)
 # =========================================================
 def load_data(table_name, columns):
     try:
@@ -631,7 +631,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
     m_logs = logs_copy[logs_copy["month_p"] == this_month]
     m_logs_count = len(m_logs)
 
-    # [수정] 실매출 독립 계산 - sales_df 기준 100% 항시 집계
+    # sales_df 기준 확정 매출 독립 집계
     current_sales = st.session_state.get("sales_df", sales)
     sales_copy = current_sales.copy()
     sales_copy["month_p"] = pd.to_datetime(sales_copy["date"], errors="coerce").dt.to_period("M")
@@ -842,10 +842,16 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 this_date = date(d_year, d_month, day_num).isoformat()
                 day_b_cnt = len(active_bookings[active_bookings["date"] == this_date])
                 is_selected = (this_date == st.session_state["dash_selected_date"])
-                
-                label = f"{day_num}"
+                is_today = (this_date == today.isoformat())
+
+                # [달력 UI 개선] 예약 스케줄 존재 시 파란색 카운트 뱃지로 눈에 띄게 강조
                 if day_b_cnt > 0:
-                    label = f"🟢{day_num}({day_b_cnt})"
+                    label = f"📅 {day_num}일 ({day_b_cnt}건)"
+                else:
+                    label = f"{day_num}"
+
+                if is_today:
+                    label = f"📌 {label}"
 
                 btn_type = "primary" if is_selected else "secondary"
                 if wc.button(label, key=f"dash_cal_day_{this_date}", use_container_width=True, type=btn_type):
@@ -944,16 +950,14 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (KST 기준 지난 시간대 엄격 원천 제거)
+# 5. 페이지: 수업 등록 (달력 예약 시각성 강조 & 지나간 시간대 완벽 필터링)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
 
-    # [수정] 대한민국 표준시(KST) 실시간 시각 추출
     kst_now = get_kst_now()
     today_str = kst_now.date().isoformat()
     
-    # 세션에 고정되어 있던 선택 날짜를 클릭 시 유지 가능하도록 초기 세팅만 보정
     if "selected_cal_date" not in st.session_state:
         st.session_state["selected_cal_date"] = today_str
     if "cal_year" not in st.session_state:
@@ -1005,8 +1009,9 @@ def page_booking(members, bookings):
             is_selected = (this_date == st.session_state["selected_cal_date"])
             is_today = (this_date == today_str)
 
+            # [달력 UI 시각화 강화] 수업 건수가 있는 날은 직관적인 카운트 뱃지로 표시
             if day_count > 0:
-                label = f"🟢 {day_num}일 ({day_count}건)"
+                label = f"📅 {day_num}일 ({day_count}건)"
             else:
                 label = f"{day_num}"
 
@@ -1055,13 +1060,13 @@ def page_booking(members, bookings):
         st.markdown("---")
         st.markdown("##### ➕ 신규 수업 예약 등록")
 
-        # [수정] 대한민국 KST 표준시 기준 08시 이하(06:00, 07:00, 08:00) 시간대 완전 제외
+        # [시간 필터링] 한국 표준시 기준 지난 시각(Hour) 완전 제거
         valid_slots = []
         for slot in TIME_SLOTS:
             sh, sm = map(int, slot.split(":"))
             
             if sel_date == today_str:
-                # KST 시각의 Hour(08시)보다 큰 정시 시간대(09:00~)만 허용
+                # KST 시각의 Hour(08시)보다 큰 미래 정시 시간대만 수용
                 if sh > kst_now.hour:
                     valid_slots.append(slot)
             elif sel_date > today_str:
@@ -1641,7 +1646,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (신규 회원 등록 = 확정 매출 독립 집계)
+# 9. 페이지: 회원 관리
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1700,7 +1705,7 @@ def page_members(members, sales, bookings, logs, reports):
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         save_members(members)
 
-                        # [핵심] 신규 회원 등록 시 확정 매출 독립 집계 (재등록 상태와 무관하게 100% 반영)
+                        # 확정 실매출 데이터 저장
                         new_s = {
                             "sale_id": next_id(sales, "sale_id"), 
                             "member_id": new_m_id, 
@@ -1877,7 +1882,6 @@ def page_members(members, sales, bookings, logs, reports):
     with tab2:
         st.subheader("💰 월별 매출 통합 분석")
         
-        # [수정] 세션 메모리의 sales_df 100% 매핑
         current_sales = st.session_state.get("sales_df", sales)
         
         if current_sales.empty:
