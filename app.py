@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (버그 수정 및 연동 최적화 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (대시보드 상세조회 & 과거예약 방지 고도화)
 ================================================================================
 """
 
@@ -596,7 +596,7 @@ def build_4step_report_html(member, report):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드
+# 4. 페이지 1: 센터 대시보드 (지표 카드 클릭시 상세 리스트 노출)
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -607,23 +607,109 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
     this_month = pd.Period(today, "M")
     
-    logs["month_p"] = pd.to_datetime(logs["date"], errors="coerce").dt.to_period("M")
-    m_logs_count = len(logs[logs["month_p"] == this_month])
+    logs_copy = logs.copy()
+    logs_copy["month_p"] = pd.to_datetime(logs_copy["date"], errors="coerce").dt.to_period("M")
+    m_logs = logs_copy[logs_copy["month_p"] == this_month]
+    m_logs_count = len(m_logs)
 
-    sales["month_p"] = pd.to_datetime(sales["date"], errors="coerce").dt.to_period("M")
-    m_sales = sales[sales["month_p"] == this_month]
+    sales_copy = sales.copy()
+    sales_copy["month_p"] = pd.to_datetime(sales_copy["date"], errors="coerce").dt.to_period("M")
+    m_sales = sales_copy[sales_copy["month_p"] == this_month]
     real_revenue = pd.to_numeric(m_sales["amount"], errors="coerce").fillna(0).sum()
 
+    if "dash_selected_metric" not in st.session_state:
+        st.session_state["dash_selected_metric"] = None
+
+    # [요청 반영] 클릭 시 리스트 노출을 위한 대시보드 metric 버튼 구현
     cols = st.columns(5)
-    metrics = [
-        ("총 관리 회원 수", f"{total_m}명", ""),
-        ("전체 남은 세션 총합", f"{rem_sum}회", "accent"),
-        ("이달의 진행 수업 수", f"{m_logs_count}회", "accent"),
-        ("작성된 변화설계서", f"{len(reports)}건", "accent"),
-        ("이달의 누적 매출액", f"{real_revenue:,.0f}원", "accent"),
-    ]
-    for col, (label, val, cls) in zip(cols, metrics):
-        col.markdown(f"""<div class="pt-metric"><div class="label">{label}</div><div class="value {cls}">{val}</div></div>""", unsafe_allow_html=True)
+    
+    with cols[0]:
+        st.markdown(f'<div class="pt-metric"><div class="label">총 관리 회원 수</div><div class="value">{total_m}명</div></div>', unsafe_allow_html=True)
+        if st.button("📋 회원 목록 보기", key="btn_view_members", use_container_width=True):
+            st.session_state["dash_selected_metric"] = "members" if st.session_state["dash_selected_metric"] != "members" else None
+            rerun()
+
+    with cols[1]:
+        st.markdown(f'<div class="pt-metric"><div class="label">전체 남은 세션 총합</div><div class="value accent">{rem_sum}회</div></div>', unsafe_allow_html=True)
+        if st.button("🔍 세션 현황 보기", key="btn_view_sessions", use_container_width=True):
+            st.session_state["dash_selected_metric"] = "sessions" if st.session_state["dash_selected_metric"] != "sessions" else None
+            rerun()
+
+    with cols[2]:
+        st.markdown(f'<div class="pt-metric"><div class="label">이달의 진행 수업 수</div><div class="value accent">{m_logs_count}회</div></div>', unsafe_allow_html=True)
+        if st.button("📝 이달 수업일지 보기", key="btn_view_logs", use_container_width=True):
+            st.session_state["dash_selected_metric"] = "logs" if st.session_state["dash_selected_metric"] != "logs" else None
+            rerun()
+
+    with cols[3]:
+        st.markdown(f'<div class="pt-metric"><div class="label">작성된 변화설계서</div><div class="value accent">{len(reports)}건</div></div>', unsafe_allow_html=True)
+        if st.button("📑 리포트 목록 보기", key="btn_view_reports", use_container_width=True):
+            st.session_state["dash_selected_metric"] = "reports" if st.session_state["dash_selected_metric"] != "reports" else None
+            rerun()
+
+    with cols[4]:
+        st.markdown(f'<div class="pt-metric"><div class="label">이달의 누적 매출액</div><div class="value accent">{real_revenue:,.0f}원</div></div>', unsafe_allow_html=True)
+        if st.button("💰 이달 매출 내역 보기", key="btn_view_sales", use_container_width=True):
+            st.session_state["dash_selected_metric"] = "sales" if st.session_state["dash_selected_metric"] != "sales" else None
+            rerun()
+
+    # [요청 반영] 지표 버튼 클릭 시 하단에 노출되는 상세 리스트 영역
+    sel_metric = st.session_state.get("dash_selected_metric")
+    if sel_metric:
+        st.write("")
+        st.markdown('<div class="pt-card" style="border: 2px solid #2563EB;">', unsafe_allow_html=True)
+        
+        if sel_metric == "members":
+            st.subheader("👥 전체 관리 회원 상세 리스트")
+            disp_m = members[["member_id", "name", "gender", "contact", "reg_date", "total_sessions", "remaining_sessions", "status", "goal"]].copy()
+            disp_m.columns = ["회원ID", "이름", "성별", "연락처", "등록일", "총 세션", "남은 세션", "상태", "운동목표"]
+            st.dataframe(disp_m, use_container_width=True, hide_index=True)
+
+        elif sel_metric == "sessions":
+            st.subheader("📊 회원별 잔여 PT 세션 현황 리스트")
+            disp_s = members[["name", "gender", "contact", "total_sessions", "remaining_sessions"]].copy()
+            disp_s["진행 세션"] = disp_s["total_sessions"].astype(int) - disp_s["remaining_sessions"].astype(int)
+            disp_s = disp_s[["name", "gender", "contact", "total_sessions", "진행 세션", "remaining_sessions"]].sort_values("remaining_sessions")
+            disp_s.columns = ["이름", "성별", "연락처", "총 등록 세션", "진행 완료 세션", "잔여 세션"]
+            st.dataframe(disp_s, use_container_width=True, hide_index=True)
+
+        elif sel_metric == "logs":
+            st.subheader(f"📝 {today.year}년 {today.month}월 진행된 수업일지 리스트")
+            if m_logs.empty:
+                st.info("이번 달 진행된 수업일지 내역이 없습니다.")
+            else:
+                merged_l = m_logs.merge(members[["member_id", "name", "gender"]], on="member_id", how="left")
+                disp_l = merged_l[["date", "start_time", "end_time", "name", "gender", "rpe_avg", "good_points", "attendance"]].copy()
+                disp_l.columns = ["날짜", "시작시간", "종료시간", "회원명", "성별", "평균 RPE", "피드백 요약", "출결상태"]
+                st.dataframe(disp_l.sort_values("날짜", ascending=False), use_container_width=True, hide_index=True)
+
+        elif sel_metric == "reports":
+            st.subheader("📑 작성 완료된 내 몸 변화설계서 목록")
+            if reports.empty:
+                st.info("작성된 리포트가 없습니다.")
+            else:
+                merged_r = reports.merge(members[["member_id", "name", "gender"]], on="member_id", how="left")
+                disp_r = merged_r[["date", "name", "gender", "goal_text", "status", "delivered"]].copy()
+                disp_r["delivered"] = disp_r["delivered"].apply(lambda v: "✅ 완료" if v else "⏳ 미전달")
+                disp_r.columns = ["발행일", "회원명", "성별", "운동목적", "작성상태", "전달여부"]
+                st.dataframe(disp_r.sort_values("발행일", ascending=False), use_container_width=True, hide_index=True)
+
+        elif sel_metric == "sales":
+            st.subheader(f"💰 {today.year}년 {today.month}월 결제 매출 상세 내역")
+            if m_sales.empty:
+                st.info("이번 달 집계된 매출 내역이 없습니다.")
+            else:
+                merged_sal = m_sales.merge(members[["member_id", "name", "gender"]], on="member_id", how="left")
+                disp_sal = merged_sal[["date", "name", "gender", "product_name", "amount", "pay_type"]].copy()
+                disp_sal["amount"] = disp_sal["amount"].apply(lambda v: f"{v:,.0f}원")
+                disp_sal.columns = ["결제일", "회원명", "성별", "상품명", "결제금액", "결제수단"]
+                st.dataframe(disp_sal.sort_values("결제일", ascending=False), use_container_width=True, hide_index=True)
+
+        if st.button("❌ 상세 리스트 닫기", key="btn_close_metric_detail"):
+            st.session_state["dash_selected_metric"] = None
+            rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.write("")
 
@@ -762,14 +848,14 @@ def page_dashboard(members, logs, sales, reports, bookings):
     if logs.empty:
         st.caption("기록된 수업 일지가 없습니다.")
     else:
-        m_logs = logs[pd.to_datetime(logs["date"], errors="coerce").dt.to_period("M") == this_month]
-        if m_logs.empty:
+        m_logs_chart = logs[pd.to_datetime(logs["date"], errors="coerce").dt.to_period("M") == this_month]
+        if m_logs_chart.empty:
             st.caption("이번 달 수업 진행 기록이 아직 없습니다.")
         else:
-            att_counts = m_logs["attendance"].value_counts()
+            att_counts = m_logs_chart["attendance"].value_counts()
             attend_c = att_counts.get("출석", 0) + att_counts.get("출석 완료", 0)
             absent_c = att_counts.get("결석", 0) + att_counts.get("노쇼", 0)
-            pending_c = len(m_logs) - (attend_c + absent_c)
+            pending_c = len(m_logs_chart) - (attend_c + absent_c)
 
             labels = ["🟢 출석 완료", "🔴 결석/노쇼", "⏳ 미체크"]
             values = [attend_c, absent_c, max(0, pending_c)]
@@ -782,7 +868,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록
+# 5. 페이지: 수업 등록 (과거 시점 예약 방지 반영)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
@@ -900,20 +986,28 @@ def page_booking(members, bookings):
                 cand_idx = st.selectbox("예약할 회원 선택", range(len(cand_options)), format_func=lambda i: cand_options[i], key="cand_select_new")
 
                 if st.button("✅ 선택한 시간으로 수업 예약 확정", type="primary", use_container_width=True):
-                    dup_check = active_bookings[(active_bookings["date"] == sel_date) & (active_bookings["time_slot"] == sel_slot)]
-                    if not dup_check.empty:
-                        st.error("⚠️ 예약할 수 없습니다! 해당 날짜와 시간대에 이미 등록된 수업이 있습니다.")
+                    # [요청 반영] 과거 시점 수업 예약 방지 검증 로직
+                    now = datetime.now()
+                    slot_hour, slot_minute = map(int, sel_slot.split(":"))
+                    target_dt = datetime.strptime(sel_date, "%Y-%m-%d").replace(hour=slot_hour, minute=slot_minute)
+
+                    if target_dt < now:
+                        st.error(f"⚠️ 예약할 수 없습니다! 이미 지나간 시점({target_dt.strftime('%Y-%m-%d %H:%M')})의 수업은 예약 등록이 불가합니다.")
                     else:
-                        chosen = candidates.iloc[cand_idx]
-                        new_booking = {
-                            "booking_id": next_id(bookings, "booking_id"),
-                            "member_id": int(chosen["member_id"]), "date": sel_date,
-                            "time_slot": sel_slot, "status": "예약됨",
-                        }
-                        bookings = pd.concat([bookings, pd.DataFrame([new_booking])], ignore_index=True)
-                        save_bookings(bookings)
-                        st.toast(f"{chosen['name']} 회원이 {sel_date} {sel_slot}에 예약되었습니다.")
-                        rerun()
+                        dup_check = active_bookings[(active_bookings["date"] == sel_date) & (active_bookings["time_slot"] == sel_slot)]
+                        if not dup_check.empty:
+                            st.error("⚠️ 예약할 수 없습니다! 해당 날짜와 시간대에 이미 등록된 수업이 있습니다.")
+                        else:
+                            chosen = candidates.iloc[cand_idx]
+                            new_booking = {
+                                "booking_id": next_id(bookings, "booking_id"),
+                                "member_id": int(chosen["member_id"]), "date": sel_date,
+                                "time_slot": sel_slot, "status": "예약됨",
+                            }
+                            bookings = pd.concat([bookings, pd.DataFrame([new_booking])], ignore_index=True)
+                            save_bookings(bookings)
+                            st.toast(f"{chosen['name']} 회원이 {sel_date} {sel_slot}에 예약되었습니다.")
+                            rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1459,7 +1553,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (신규 등록 매출 연동 및 즉시 삭제 수정)
+# 9. 페이지: 회원 관리
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1518,7 +1612,6 @@ def page_members(members, sales, bookings, logs, reports):
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         save_members(members)
 
-                        # [수정 원인 1 해결] 매출 데이터프레임 및 세션 스토리지 즉시 동기화
                         new_s = {
                             "sale_id": next_id(sales, "sale_id"), 
                             "member_id": new_m_id, 
@@ -1602,7 +1695,6 @@ def page_members(members, sales, bookings, logs, reports):
             with c_del:
                 st.write("")
                 if st.button("🗑️", key=f"btn_del_mem_{m_id}_{idx}", use_container_width=True):
-                    # [수정 원인 2 해결] DB 삭제 후 메모리 객체에서도 즉시 제외 처리
                     supabase.table("members").delete().eq("member_id", m_id).execute()
                     members = members[members["member_id"].astype(str) != str(m_id)]
                     save_members(members)
