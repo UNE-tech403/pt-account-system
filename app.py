@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (AI 톤앤매너 정밀 교정 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (성능 최적화 적용 버전)
 ================================================================================
 """
 
@@ -239,7 +239,6 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 '{t}' 요소를 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
-# 전문적 톤앤매너 텍스트 변환기 고도화
 def refine_raw_text(text):
     if not text:
         return "체형 밸런스 개선 및 안정적인 신체 정렬 확보"
@@ -247,7 +246,6 @@ def refine_raw_text(text):
     t = str(text).strip()
     
     replacements = [
-        # 근육 및 움직임 가동성 관련
         (r"대퇴근.*타이트.*안나옴|대퇴근.*타이트|타이트.*안나옴|움직임.*안나옴", "대퇴사두근 및 주변 근막의 긴장으로 인한 관절 가동 범위(ROM) 제한"),
         (r"라운드숄더|말린어깨|어깨.*말림", "상체 경추 및 흉추부 굴곡으로 인한 라운드 숄더 불균형"),
         (r"전방경사.*관찰됨|전방경사", "골반 전방 경사(Pelvic Anterior Tilt) 패턴으로 인한 허리 하중 집중"),
@@ -276,7 +274,7 @@ def refine_raw_text(text):
 
 
 # =========================================================
-# 2. Supabase DB 데이터 관리 함수
+# 2. Supabase DB 데이터 관리 함수 (성능 최적화 버전)
 # =========================================================
 def load_data(table_name, columns):
     try:
@@ -303,6 +301,26 @@ def load_sales(): return load_data("sales", SALES_COLUMNS)
 def load_reports(): return load_data("reports", REPORTS_COLUMNS)
 def load_bookings(): return load_data("bookings", BOOKINGS_COLUMNS)
 
+# 캐시 데이터를 불러오거나 초기화하는 전역 헬퍼
+def get_cached_data(force_reload=False):
+    if force_reload or "members_df" not in st.session_state:
+        st.session_state["members_df"] = load_members()
+        st.session_state["logs_df"] = load_logs()
+        st.session_state["inbody_df"] = load_inbody()
+        st.session_state["sales_df"] = load_sales()
+        st.session_state["reports_df"] = load_reports()
+        st.session_state["bookings_df"] = load_bookings()
+
+    return (
+        st.session_state["members_df"],
+        st.session_state["logs_df"],
+        st.session_state["inbody_df"],
+        st.session_state["sales_df"],
+        st.session_state["reports_df"],
+        st.session_state["bookings_df"]
+    )
+
+# [성능 개선] Batch Upsert 전송 방식으로 변경
 def save_data(table_name, df):
     if df.empty: return
     data = df.to_dict(orient="records")
@@ -310,6 +328,7 @@ def save_data(table_name, df):
     float_fields = ["rpe_avg", "weight", "skeletal_muscle", "body_fat_pct"]
     bool_fields = ["sent", "delivered"]
 
+    clean_batch = []
     for row in data:
         clean_row = {}
         for k, v in row.items():
@@ -323,26 +342,45 @@ def save_data(table_name, df):
                 clean_row[k] = bool(v)
             else:
                 clean_row[k] = str(v)
-        try:
-            supabase.table(table_name).upsert(clean_row).execute()
-        except Exception as e:
-            st.error(f"DB 저장 오류 ({table_name}): {e}")
+        clean_batch.append(clean_row)
 
-def save_members(df): save_data("members", df)
-def save_logs(df): save_data("logs", df)
-def save_inbody(df): save_data("inbody", df)
-def save_sales(df): save_data("sales", df)
-def save_reports(df): save_data("reports", df)
-def save_bookings(df): save_data("bookings", df)
+    try:
+        # 단 1회의 HTTP 요청으로 일괄 저장
+        supabase.table(table_name).upsert(clean_batch).execute()
+    except Exception as e:
+        st.error(f"DB 저장 오류 ({table_name}): {e}")
+
+def save_members(df): 
+    st.session_state["members_df"] = df
+    save_data("members", df)
+
+def save_logs(df): 
+    st.session_state["logs_df"] = df
+    save_data("logs", df)
+
+def save_inbody(df): 
+    st.session_state["inbody_df"] = df
+    save_data("inbody", df)
+
+def save_sales(df): 
+    st.session_state["sales_df"] = df
+    save_data("sales", df)
+
+def save_reports(df): 
+    st.session_state["reports_df"] = df
+    save_data("reports", df)
+
+def save_bookings(df): 
+    st.session_state["bookings_df"] = df
+    save_data("bookings", df)
 
 def update_attendance_log(member_id, date_str, start_time_str, end_time_str, att_value):
     try:
-        res = supabase.table("logs").select("*").eq("member_id", member_id).eq("date", date_str).eq("start_time", start_time_str).execute()
-        if res.data and len(res.data) > 0:
-            log_id = res.data[0]["log_id"]
-            supabase.table("logs").update({"attendance": att_value}).eq("log_id", log_id).execute()
+        logs_df = st.session_state.get("logs_df", load_logs())
+        mask = (logs_df["member_id"].astype(str) == str(member_id)) & (logs_df["date"] == date_str) & (logs_df["start_time"] == start_time_str)
+        if mask.any():
+            logs_df.loc[mask, "attendance"] = att_value
         else:
-            logs_df = load_logs()
             new_id = next_id(logs_df, "log_id")
             new_row = {
                 "log_id": new_id, "member_id": member_id, "date": date_str,
@@ -350,7 +388,9 @@ def update_attendance_log(member_id, date_str, start_time_str, end_time_str, att
                 "good_points": f"수업 {att_value} 처리", "improve_points": "", "rpe_avg": 7.0,
                 "sent": False, "attendance": att_value
             }
-            supabase.table("logs").insert(new_row).execute()
+            logs_df = pd.concat([logs_df, pd.DataFrame([new_row])], ignore_index=True)
+        
+        save_logs(logs_df)
     except Exception as e:
         st.error(f"출결 동기화 오류: {e}")
 
@@ -1787,16 +1827,13 @@ def page_inbody(members, inbody):
 
 
 # =========================================================
-# 11. 메인 라우팅
+# 11. 메인 라우팅 (성능 최적화 반영)
 # =========================================================
 def main():
     init_all_files()
-    members = load_members()
-    logs = load_logs()
-    inbody = load_inbody()
-    sales = load_sales()
-    reports = load_reports()
-    bookings = load_bookings()
+    
+    # [성능 개선 핵심] Session State 기반 캐싱 데이터 로드
+    members, logs, inbody, sales, reports, bookings = get_cached_data()
 
     st.sidebar.markdown(f"""
     <div style="padding:10px 4px 18px;">
