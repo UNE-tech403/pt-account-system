@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (기능 고도화 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (버그 수정 및 연동 최적화 버전)
 ================================================================================
 """
 
@@ -239,7 +239,6 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 '{t}' 요소를 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
-# 전문적 톤앤매너 텍스트 변환기 (고도화 반영)
 def refine_raw_text(text):
     if not text:
         return "체형 밸런스 개선 및 안정적인 신체 정렬 확보"
@@ -247,7 +246,6 @@ def refine_raw_text(text):
     t = str(text).strip()
     
     replacements = [
-        # 골반/체형 관련 임상 표현 강화
         (r"오른쪽.*골반.*틀어짐|골반.*오른쪽|오른쪽으로.*골반", "골반 우측 변위(Pelvic Deviation) 및 좌우 밸런스 불균형"),
         (r"골반틀어짐.*불균형|골반.*틀어짐|골반.*불균형", "골반 비대칭 및 골반대(Pelvic Girdle) 정렬 불균형"),
         (r"대퇴근.*타이트.*안나옴|대퇴근.*타이트|타이트.*안나옴|움직임.*안나옴", "대퇴사두근 및 주변 근막의 긴장으로 인한 관절 가동 범위(ROM) 제한"),
@@ -759,7 +757,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.write("")
-    # [대시보드 지표 개선] 6개월 추이 대신 '당월 수업 출석/노쇼/미체크 비율' 차트로 변경
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("#### 🎯 당월 수업 출결 및 소진 이행률")
     if logs.empty:
@@ -922,7 +919,7 @@ def page_booking(members, bookings):
 
 
 # =========================================================
-# 6. 페이지: 주차별 재등록 현황 (합계 행 추가)
+# 6. 페이지: 주차별 재등록 현황
 # =========================================================
 def page_re_registration(members, sales):
     st.title("🎯 주차별 재등록 현황 및 매출 예측 뷰어")
@@ -1042,7 +1039,6 @@ def page_re_registration(members, sales):
         st.markdown("##### 📋 주차별 재등록 예상 금액 집계 데이터")
         df_tr_disp = df_tr.copy()
 
-        # [요청 반영] 합계(Total) 행 계산 및 추가
         total_row = {
             "주차": "합계 (Total)",
             "🟢 높음": df_tr_disp["🟢 높음"].sum(),
@@ -1138,7 +1134,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (임상 문장 정밀 교정 반영)
+# 7. 페이지: AI 내 몸 변화 설계서
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1270,7 +1266,6 @@ def page_bodyplan(members, reports):
             refined_posture = refine_raw_text(raw_posture)
             refined_func = refine_raw_text(raw_func)
 
-            # [요청 반영] 정제 문장이 분석 결과에 정밀하게 반영되도록 포맷 수정
             st.session_state[f"ta_analysis_{e_id}"] = f"""[신체 정밀 종합 분석]
 {selected_m['name']} 회원님의 개별 신체 정렬과 운동 목적을 정밀 분석한 결과, 핵심 개선 과제는 {refined_goal}입니다.
 
@@ -1464,7 +1459,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (메모 버튼 & 토글형 사전설문 반영)
+# 9. 페이지: 회원 관리 (신규 등록 매출 연동 및 즉시 삭제 수정)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1523,11 +1518,20 @@ def page_members(members, sales, bookings, logs, reports):
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         save_members(members)
 
-                        new_s = {"sale_id": next_id(sales, "sale_id"), "member_id": new_m_id, "date": today_obj.isoformat(), "product_name": f"PT {sessions}회", "amount": amount, "pay_type": pay_type}
+                        # [수정 원인 1 해결] 매출 데이터프레임 및 세션 스토리지 즉시 동기화
+                        new_s = {
+                            "sale_id": next_id(sales, "sale_id"), 
+                            "member_id": new_m_id, 
+                            "date": today_obj.isoformat(), 
+                            "product_name": f"PT {sessions}회 신규등록", 
+                            "amount": amount, 
+                            "pay_type": pay_type
+                        }
                         sales = pd.concat([sales, pd.DataFrame([new_s])], ignore_index=True)
                         save_sales(sales)
+
                         st.session_state["show_reg_modal"] = False
-                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되었습니다.")
+                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되고 매출({amount:,.0f}원)이 계상되었습니다.")
                         rerun()
 
     tab1, tab2 = st.tabs(["📋 회원 세션 관리 & 메모/사전설문", "💰 월별 매출 통합 분석"])
@@ -1556,7 +1560,6 @@ def page_members(members, sales, bookings, logs, reports):
 
             st.markdown('<div class="pt-card" style="padding-bottom:10px;">', unsafe_allow_html=True)
 
-            # [요청 반영] 회원 이름 옆 메모 버튼 추가 레이아웃
             c_name, c_memo_btn, c_info, c_re_btn, c_btn1, c_btn2, c_del = st.columns([1.2, 0.7, 1.8, 0.8, 0.5, 0.5, 0.5])
 
             with c_name:
@@ -1599,10 +1602,14 @@ def page_members(members, sales, bookings, logs, reports):
             with c_del:
                 st.write("")
                 if st.button("🗑️", key=f"btn_del_mem_{m_id}_{idx}", use_container_width=True):
+                    # [수정 원인 2 해결] DB 삭제 후 메모리 객체에서도 즉시 제외 처리
                     supabase.table("members").delete().eq("member_id", m_id).execute()
+                    members = members[members["member_id"].astype(str) != str(m_id)]
+                    save_members(members)
+
                     if memo_open_id == m_id:
                         st.session_state["memo_open_id"] = None
-                    st.toast(f"'{m['name']}' 회원의 데이터가 완벽 삭제되었습니다.")
+                    st.toast(f"'{m['name']}' 회원의 데이터가 삭제되었습니다.")
                     rerun()
 
             if re_pay_open_id == m_id:
@@ -1642,7 +1649,6 @@ def page_members(members, sales, bookings, logs, reports):
             if has_memo and memo_open_id != m_id:
                 st.caption(f"💬 특이사항 메모: {m['memo']}")
 
-            # [요청 반영] 메모 버튼 클릭 시 특이사항 메모 & 토글형 사전 상담 설문지
             if memo_open_id == m_id:
                 st.markdown("---")
                 st.markdown(f"#### 📋 '{m['name']}' 회원 특이사항 메모 및 사전 설문지 케어")
@@ -1654,7 +1660,6 @@ def page_members(members, sales, bookings, logs, reports):
                     height=80,
                 )
 
-                # [요청 반영] 설문지 토글(expander) 형태로 구성
                 with st.expander("🩺 PT 사전 상담 인테이크(Intake) 설문지 상세보기 / 수정", expanded=False):
                     sur_c1, sur_c2 = st.columns(2)
                     s_medical = sur_c1.text_input("과거/현재 병력 및 질환 이력", value=survey_dict.get("medical", ""), placeholder="예: 고혈압, 허리 디스크, 없음 등", key=f"sur_med_{m_id}")
@@ -1736,6 +1741,8 @@ def page_members(members, sales, bookings, logs, reports):
                 with col_s3:
                     if st.button("🗑️ 삭제", key=f"btn_del_sale_{sale_id}_{idx}", use_container_width=True):
                         supabase.table("sales").delete().eq("sale_id", sale_id).execute()
+                        sales = sales[sales["sale_id"].astype(str) != str(sale_id)]
+                        save_sales(sales)
                         st.toast("해당 매출 내역이 삭제되었습니다.")
                         rerun()
 
@@ -1820,6 +1827,8 @@ def page_inbody(members, inbody):
             
             if st.button("🗑️ 기록 삭제", key=f"del_ib_{rec_id}_{idx_ib}"):
                 supabase.table("inbody").delete().eq("record_id", rec_id).execute()
+                inbody = inbody[inbody["record_id"].astype(str) != str(rec_id)]
+                save_inbody(inbody)
                 st.toast("체성분 기록이 삭제되었습니다.")
                 rerun()
 
