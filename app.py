@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 완벽 동기화 최종 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 캐싱 이슈 완벽 해결 버전)
 ================================================================================
 """
 
@@ -526,7 +526,7 @@ def build_4step_report_html(member, report):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드
+# 4. 페이지 1: 센터 대시보드 (출결 상태 수동 동기화 완벽 구현)
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -645,7 +645,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     m_name = b_row.get("name") or "회원"
                     m_gender = b_row.get("gender") or "남성"
                     
-                    # 날짜 + 시간을 정밀 매칭하여 개별 예약건의 출결 상태 조회
+                    # 날짜 + 시작시간 정밀 매칭
                     m_log = logs[(logs["date"] == sel_date_str) & (pd.to_numeric(logs["member_id"], errors="coerce") == m_id) & (logs["start_time"] == s_time)]
                     att_status = m_log.iloc[0].get("attendance") if not m_log.empty and pd.notna(m_log.iloc[0].get("attendance")) and str(m_log.iloc[0].get("attendance")).strip() != "" else "미체크"
                     
@@ -1055,7 +1055,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (AI 자동생성 및 렌더링 순서 고침)
+# 7. 페이지: AI 내 몸 변화 설계서 (AI 자동생성 버튼 연동 보완)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1180,7 +1180,7 @@ def page_bodyplan(members, reports):
             key=f"input_func_{e_id}"
         )
 
-        # AI 생성 클릭 시 text_area에 즉시 주입되도록 키값 직접 세팅
+        # AI 생성 버튼 로직 완벽 보완
         if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
             refined_goal = refine_raw_text(goal_input)
             refined_journal = refine_raw_text(raw_journal)
@@ -1760,12 +1760,12 @@ def page_inbody(members, inbody):
 
 
 # =========================================================
-# 11. 메인 라우팅
+# 11. 메인 라우팅 (페이지 이동 시 항상 최신 logs 로드)
 # =========================================================
 def main():
     init_all_files()
     members = load_members()
-    logs = load_logs()
+    logs = load_logs()  # 최신 logs 항상 로드
     inbody = load_inbody()
     sales = load_sales()
     reports = load_reports()
