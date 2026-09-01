@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 매칭 타입 오류 완벽 해결)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 완벽 동기화 완료 버전)
 ================================================================================
 """
 
@@ -324,6 +324,27 @@ def save_sales(df): save_data("sales", df)
 def save_reports(df): save_data("reports", df)
 def save_bookings(df): save_data("bookings", df)
 
+def update_attendance_log(member_id, date_str, start_time_str, end_time_str, att_value):
+    try:
+        # 기존 기록 존재 여부 체크
+        res = supabase.table("logs").select("*").eq("member_id", member_id).eq("date", date_str).eq("start_time", start_time_str).execute()
+        if res.data and len(res.data) > 0:
+            log_id = res.data[0]["log_id"]
+            supabase.table("logs").update({"attendance": att_value}).eq("log_id", log_id).execute()
+        else:
+            # 새 출결 기록 생성
+            logs_df = load_logs()
+            new_id = next_id(logs_df, "log_id")
+            new_row = {
+                "log_id": new_id, "member_id": member_id, "date": date_str,
+                "start_time": start_time_str, "end_time": end_time_str, "exercises_json": "[]",
+                "good_points": f"수업 {att_value} 처리", "improve_points": "", "rpe_avg": 7.0,
+                "sent": False, "attendance": att_value
+            }
+            supabase.table("logs").insert(new_row).execute()
+    except Exception as e:
+        st.error(f"출결 동기화 오류: {e}")
+
 def init_all_files():
     pass
 
@@ -645,7 +666,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     m_name = b_row.get("name") or "회원"
                     m_gender = b_row.get("gender") or "남성"
                     
-                    # 수치 & 문자열 타입 캐스팅 이중 안전 조회
+                    # 날짜 + 시작시간 정밀 매칭
                     m_log = logs[
                         (logs["date"].astype(str) == sel_date_str) & 
                         (pd.to_numeric(logs["member_id"], errors="coerce") == m_id) & 
@@ -676,40 +697,12 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
                     btn_c1, btn_c2, _ = st.columns([1, 1, 2])
                     if btn_c1.button("🟢 출석", key=f"dash_att_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
-                        if m_log.empty:
-                            new_l = {
-                                "log_id": next_id(logs, "log_id"), "member_id": m_id, "date": sel_date_str,
-                                "start_time": s_time, "end_time": e_time, "exercises_json": "[]",
-                                "good_points": "수업 출석 완료", "improve_points": "", "rpe_avg": 7.0, "sent": False, "attendance": "출석"
-                            }
-                            logs = pd.concat([logs, pd.DataFrame([new_l])], ignore_index=True)
-                        else:
-                            logs.loc[
-                                (logs["date"].astype(str) == sel_date_str) & 
-                                (pd.to_numeric(logs["member_id"], errors="coerce") == m_id) & 
-                                (logs["start_time"].astype(str) == s_time), "attendance"
-                            ] = "출석"
-                        
-                        save_logs(logs)
+                        update_attendance_log(m_id, sel_date_str, s_time, e_time, "출석")
                         st.toast(f"🎉 {m_name} 회원 ({s_time}) 출석 처리 완료")
                         rerun()
 
                     if btn_c2.button("🔴 결석(노쇼)", key=f"dash_abs_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
-                        if m_log.empty:
-                            new_l = {
-                                "log_id": next_id(logs, "log_id"), "member_id": m_id, "date": sel_date_str,
-                                "start_time": s_time, "end_time": e_time, "exercises_json": "[]",
-                                "good_points": "수업 결석", "improve_points": "", "rpe_avg": 0.0, "sent": False, "attendance": "결석"
-                            }
-                            logs = pd.concat([logs, pd.DataFrame([new_l])], ignore_index=True)
-                        else:
-                            logs.loc[
-                                (logs["date"].astype(str) == sel_date_str) & 
-                                (pd.to_numeric(logs["member_id"], errors="coerce") == m_id) & 
-                                (logs["start_time"].astype(str) == s_time), "attendance"
-                            ] = "결석"
-                        
-                        save_logs(logs)
+                        update_attendance_log(m_id, sel_date_str, s_time, e_time, "결석")
                         st.toast(f"🔴 {m_name} 회원 ({s_time}) 노쇼/결석 처리 완료")
                         rerun()
 
@@ -1197,7 +1190,6 @@ def page_bodyplan(members, reports):
             key=f"input_func_{e_id}"
         )
 
-        # AI 자동 생성 로직 - 세션 키 직접 변경
         if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
             refined_goal = refine_raw_text(goal_input)
             refined_journal = refine_raw_text(raw_journal)
@@ -1786,7 +1778,7 @@ def page_inbody(members, inbody):
 
 
 # =========================================================
-# 11. 메인 라우팅 (매번 DB 동기화)
+# 11. 메인 라우팅
 # =========================================================
 def main():
     init_all_files()
