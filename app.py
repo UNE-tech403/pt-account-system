@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (회원 삭제 시 연관 데이터 일괄 삭제 반영)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (대시보드 예약취소, 전문 placeholder, 달력 🟢체크 UI 반영 버전)
 ================================================================================
 """
 
@@ -647,7 +647,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
     m_logs = logs_copy[logs_copy["month_p"] == this_month]
     m_logs_count = len(m_logs)
 
-    # sales_df 실매출 100% 매핑
     current_sales = st.session_state.get("sales_df", sales)
     sales_copy = current_sales.copy()
     sales_copy["month_p"] = pd.to_datetime(sales_copy["date"], errors="coerce").dt.to_period("M")
@@ -858,13 +857,11 @@ def page_dashboard(members, logs, sales, reports, bookings):
             is_selected = (this_date == st.session_state["dash_selected_date"])
             is_today = (this_date == today.isoformat())
 
+            # 🟢 초록색 체크 시각화 적용
             if day_b_cnt > 0:
-                label = f"🔵 {day_num}일 ({day_b_cnt}건)"
+                label = f"🟢 {day_num}일 ({day_b_cnt}건)"
             else:
                 label = f"{day_num}"
-
-            if is_today:
-                label = f"📌 {label}"
 
             btn_type = "primary" if is_selected else "secondary"
             if wc.button(label, key=f"dash_cal_day_{this_date}", use_container_width=True, type=btn_type):
@@ -873,7 +870,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # [수정] 대시보드 하단 상세 수업 스케줄 내 회원 잔여 횟수(⏳ 잔여 00회) 적용
+    # 대시보드 당일 수업 스케줄
     sel_date_str = st.session_state["dash_selected_date"]
     st.markdown('<div class="pt-card" style="border-top: 4px solid #2563EB;">', unsafe_allow_html=True)
     st.markdown(f"#### 📌 **{sel_date_str}** 상세 수업 스케줄")
@@ -893,6 +890,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
             is_today_kst = (sel_date_str == today_str)
 
             for idx, b_row in merged_day_b.sort_values("time_slot").iterrows():
+                b_id = b_row["booking_id"]
                 s_time = str(b_row.get("time_slot") or "10:00").strip()
                 sh, sm = map(int, s_time.split(":"))
                 e_time = (datetime(2026, 1, 1, sh, sm) + timedelta(minutes=50)).strftime("%H:%M")
@@ -932,7 +930,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 """, unsafe_allow_html=True)
 
                 if is_today_kst:
-                    btn_c1, btn_c2, btn_c3, _ = st.columns([1, 1, 1, 3])
+                    btn_c1, btn_c2, btn_c3, btn_c4 = st.columns([1, 1, 1, 1])
                     if btn_c1.button("🟢 출석 (-1회)", key=f"dash_att_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
                         update_attendance_log_and_session(m_id, sel_date_str, s_time, e_time, "출석")
                         st.toast(f"🎉 {m_name} 회원 출석 처리 완료 (잔여 세션 -1 차감)")
@@ -947,8 +945,20 @@ def page_dashboard(members, logs, sales, reports, bookings):
                         update_attendance_log_and_session(m_id, sel_date_str, s_time, e_time, "미체크")
                         st.toast(f"🔄 {m_name} 회원 출결 초기화 완료 (잔여 세션 +1 복구)")
                         rerun()
+
+                    # [요청 반영] 대시보드 수업 스케줄 내 예약 취소 버튼
+                    if btn_c4.button("❌ 예약 취소", key=f"dash_cancel_btn_{b_id}_{idx}_{s_time}", use_container_width=True):
+                        bookings.loc[bookings["booking_id"] == b_id, "status"] = "취소"
+                        save_bookings(bookings)
+                        st.toast(f"{m_name} 회원의 {s_time} 예약이 취소되었습니다.")
+                        rerun()
                 else:
-                    st.caption("🔒 출석체크는 당일에만 진행할 수 있습니다.")
+                    col_canc, _ = st.columns([1.2, 5])
+                    if col_canc.button("❌ 예약 취소", key=f"dash_cancel_btn_past_{b_id}_{idx}_{s_time}"):
+                        bookings.loc[bookings["booking_id"] == b_id, "status"] = "취소"
+                        save_bookings(bookings)
+                        st.toast(f"{m_name} 회원의 {s_time} 예약이 취소되었습니다.")
+                        rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -978,7 +988,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록
+# 5. 페이지: 수업 등록 (🟢 초록 체크 적용)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
@@ -1037,13 +1047,11 @@ def page_booking(members, bookings):
             is_selected = (this_date == st.session_state["selected_cal_date"])
             is_today = (this_date == today_str)
 
+            # 🟢 초록색 체크 시각화 적용
             if day_count > 0:
-                label = f"🔵 {day_num}일 ({day_count}건)"
+                label = f"🟢 {day_num}일 ({day_count}건)"
             else:
                 label = f"{day_num}"
-
-            if is_today:
-                label = f"📌 {label}"
 
             btn_type = "primary" if is_selected else "secondary"
             if wc.button(label, key=f"cal_day_{this_date}", use_container_width=True, type=btn_type):
@@ -1348,7 +1356,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (자동 분할 저장 및 파싱)
+# 7. 페이지: AI 내 몸 변화 설계서 (전문 가이드 placeholder 적용)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1438,7 +1446,7 @@ def page_bodyplan(members, reports):
 
         components.html(preview_html, height=850, scrolling=True)
 
-    # 개별 회원 설계서 작성 폼
+    # [수정] 전문 해부학/역학 가이드가 담긴 입력 필드 (placeholder 전문화)
     if st.session_state.get("editing_member_id"):
         e_id = int(st.session_state.get("editing_member_id"))
         selected_m = members[pd.to_numeric(members["member_id"], errors="coerce") == e_id].iloc[0]
@@ -1457,26 +1465,25 @@ def page_bodyplan(members, reports):
         goal_input = st.text_input(
             "🎯 회원 운동 목적", 
             value=r_row.get("goal_text") if has_existing else (selected_m.get("goal") or ""),
-            placeholder="예시: 다이어트 및 오다리 체형 교정",
+            placeholder="예시: 체지방 감량, 라운드숄더 개선 및 하체 근력 증대",
             key=f"input_goal_{e_id}"
         )
         raw_journal = st.text_input(
             "1. 1회차 수업 진행 내용 (운동일지 메모)", 
-            placeholder="예시: 폼롤러 근막이완 및 맨몸 스쿼트 평가, 랫풀다운 자극점 체크 진행",
+            placeholder="예시: 횡격막 호흡 평가, 폼롤러 근막이완 및 고블릿 스쿼트 자세 정렬 지도",
             key=f"input_journal_{e_id}"
         )
         raw_posture = st.text_input(
             "2. 자세 체크 결과", 
-            placeholder="예시: 오른쪽으로 골반이 틀어져 있음",
+            placeholder="예시: 관상면(Frontal)상 좌측 골반 외측 경사 및 시상면(Sagittal)상 골반 전방 경사(Pelvic Anterior Tilt) 관찰",
             key=f"input_posture_{e_id}"
         )
         raw_func = st.text_input(
             "3. 움직임 체크 결과", 
-            placeholder="예시: 골반틀어짐으로인한 불균형 가지고 계심",
+            placeholder="예시: 딥 스쿼트 수행 시 상체 과굴곡 패턴 관찰 및 OH 프레스 수행 시 흉추 신전 제한과 승모근 보상 개입",
             key=f"input_func_{e_id}"
         )
 
-        # AI 전문 톤앤매너 정제 생성 버튼
         if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
             refined_goal = refine_raw_text(goal_input)
             refined_journal = refine_raw_text(raw_journal)
@@ -1673,7 +1680,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (회원 삭제 시 연관 데이터 일괄 연동 삭제)
+# 9. 페이지: 회원 관리
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1818,7 +1825,6 @@ def page_members(members, sales, bookings, logs, reports):
             with c_del:
                 st.write("")
                 if st.button("🗑️", key=f"btn_del_mem_{m_id}_{idx}", use_container_width=True):
-                    # [해결] 회원의 모든 연관 데이터(예약, 일지, 설계서, 매출, 인바디) DB 및 메모리 일괄 삭제
                     supabase.table("bookings").delete().eq("member_id", m_id).execute()
                     supabase.table("logs").delete().eq("member_id", m_id).execute()
                     supabase.table("reports").delete().eq("member_id", m_id).execute()
@@ -1826,7 +1832,6 @@ def page_members(members, sales, bookings, logs, reports):
                     supabase.table("sales").delete().eq("member_id", m_id).execute()
                     supabase.table("members").delete().eq("member_id", m_id).execute()
 
-                    # 세션 스토리지 메모리 동기화
                     if "bookings_df" in st.session_state:
                         st.session_state["bookings_df"] = st.session_state["bookings_df"][st.session_state["bookings_df"]["member_id"].astype(str) != str(m_id)]
                     if "logs_df" in st.session_state:
