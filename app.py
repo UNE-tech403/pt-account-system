@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (AI RAW 데이터 고도화 가공 엔진 탑재)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (회원 삭제 시 연관 데이터 일괄 삭제 반영)
 ================================================================================
 """
 
@@ -263,26 +263,19 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 '{t}' 요소를 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
-# [핵심] RAW 데이터 전문 고도화 정제기 (복사 붙여넣기 차단)
 def refine_raw_text(text):
     if not text:
         return "체형 밸런스 개선 및 안정적인 신체 정렬 확보"
     
     t = str(text).strip()
     
-    # 구어체 및 단문 메모를 전문 해부학/역학 용어로 변환하는 규칙
     replacements = [
-        # 유연성 및 부상위험 메모 고도화
         (r"유연.*부상위험.*적으실듯|유연.*부상위험|유연하셔서|부상위험.*적음|부상위험.*적으실듯", 
          "주요 관절의 가동 범위(ROM)가 양호한 상태이나, 과가동성(Hyper-mobility)으로 인한 제어력 저하를 방지하기 위해 관절 고립력 및 코어 지지력 강화 트레이닝 적용"),
-        
-        # 골반 관련 고도화
         (r"오른쪽.*골반.*틀어짐|골반.*오른쪽|오른쪽으로.*골반", "골반 우측 변위(Pelvic Lateral Deviation) 및 골반대(Pelvic Girdle) 정렬 불균형"),
         (r"전방경사.*골반|골반.*전방경사|전방경사", "골반 전방 경사(Pelvic Anterior Tilt) 패턴으로 인한 요추 하중 집중 및 요부 근막 긴장"),
         (r"후방경사", "골반 후방 경사(Pelvic Posterior Tilt)에 따른 복부 내압 저하 및 둔근 활성화 제한"),
         (r"골반틀어짐.*불균형|골반.*틀어짐|골반.*불균형", "골반 비대칭으로 인한 신체 좌우 지지 밸런스 저하"),
-
-        # 운동 진행 메모 고도화
         (r"호흡교정.*스쿼트|호흡교정|스쿼트", "횡격막 호흡 정렬을 통한 코어 복압 확보 및 하체 하중 분산 메커니즘 훈련"),
         (r"기초\s*스트레칭.*하체|하체운동.*진행|하체운동", "하체 관절 가동성 확보 및 주동근 수축 자극 극대화 훈련"),
         (r"다이어트|살\s*빼고\s*싶어함|체지방\s*감량", "체지방 순감량 및 신체 밸런스 라인 형성"),
@@ -1445,7 +1438,7 @@ def page_bodyplan(members, reports):
 
         components.html(preview_html, height=850, scrolling=True)
 
-    # [수정] 개별 회원 설계서 작성 폼 (AI 고도화 파싱을 적용하여 각 항목에 자동 분할 입력)
+    # 개별 회원 설계서 작성 폼
     if st.session_state.get("editing_member_id"):
         e_id = int(st.session_state.get("editing_member_id"))
         selected_m = members[pd.to_numeric(members["member_id"], errors="coerce") == e_id].iloc[0]
@@ -1483,14 +1476,13 @@ def page_bodyplan(members, reports):
             key=f"input_func_{e_id}"
         )
 
-        # [고도화] AI 에이전트 생성 클릭 시 각 세부 입력란으로 자동 분할 파싱
+        # AI 전문 톤앤매너 정제 생성 버튼
         if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
             refined_goal = refine_raw_text(goal_input)
             refined_journal = refine_raw_text(raw_journal)
             refined_posture = refine_raw_text(raw_posture)
             refined_func = refine_raw_text(raw_func)
 
-            # 1. 신체 정밀 종합 분석란으로 파싱 분할
             st.session_state[f"ta_analysis_{e_id}"] = f"""[신체 정밀 종합 분석]
 {selected_m['name']} 회원님의 정밀 신체 평가 결과, 핵심 개선 과제는 '{refined_goal}'입니다.
 
@@ -1499,12 +1491,10 @@ def page_bodyplan(members, reports):
             st.session_state[f"ai_posture_text_{e_id}"] = f"체형 정렬 평가: {refined_posture}"
             st.session_state[f"ai_func_text_{e_id}"] = f"동작 가동성 평가: {refined_func}"
 
-            # 2. Phase 1~3 로드맵 각 항목으로 파싱 분할
             st.session_state[f"ta_p1_{e_id}"] = f"Phase 1 [1-4주차: 관절 이완 & 호흡 정렬 익히기]\n• 타이트해진 근막 이완 및 횡격막 호흡 정렬\n• 훈련 성과 반영: {refined_journal}"
             st.session_state[f"ta_p2_{e_id}"] = f"Phase 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 보상 작용 없이 주동근 고립 자극 전달\n• 개선 과제 반영: {refined_posture} 케어"
             st.session_state[f"ta_p3_{e_id}"] = f"Phase 3 [9-12주차: 체력 극대화 & 자율 독립 루틴 완성]\n• 맞춤형 자율 운동 프로그램 체득 및 운동 자립 완성\n• 개선 과제 반영: {refined_func} 예방"
 
-            # 3. 트레이너 코멘트란으로 파싱 분할
             st.session_state[f"ta_comment_{e_id}"] = f""""{selected_m['name']} 님을 위한 {MY_NAME} 트레이너의 진심 어린 한마디"
 
 {selected_m['name']} 회원님, 담당 트레이너 {MY_NAME}입니다.
@@ -1683,7 +1673,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리
+# 9. 페이지: 회원 관리 (회원 삭제 시 연관 데이터 일괄 연동 삭제)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1828,13 +1818,30 @@ def page_members(members, sales, bookings, logs, reports):
             with c_del:
                 st.write("")
                 if st.button("🗑️", key=f"btn_del_mem_{m_id}_{idx}", use_container_width=True):
+                    # [해결] 회원의 모든 연관 데이터(예약, 일지, 설계서, 매출, 인바디) DB 및 메모리 일괄 삭제
+                    supabase.table("bookings").delete().eq("member_id", m_id).execute()
+                    supabase.table("logs").delete().eq("member_id", m_id).execute()
+                    supabase.table("reports").delete().eq("member_id", m_id).execute()
+                    supabase.table("inbody").delete().eq("member_id", m_id).execute()
+                    supabase.table("sales").delete().eq("member_id", m_id).execute()
                     supabase.table("members").delete().eq("member_id", m_id).execute()
+
+                    # 세션 스토리지 메모리 동기화
+                    if "bookings_df" in st.session_state:
+                        st.session_state["bookings_df"] = st.session_state["bookings_df"][st.session_state["bookings_df"]["member_id"].astype(str) != str(m_id)]
+                    if "logs_df" in st.session_state:
+                        st.session_state["logs_df"] = st.session_state["logs_df"][st.session_state["logs_df"]["member_id"].astype(str) != str(m_id)]
+                    if "reports_df" in st.session_state:
+                        st.session_state["reports_df"] = st.session_state["reports_df"][st.session_state["reports_df"]["member_id"].astype(str) != str(m_id)]
+                    if "sales_df" in st.session_state:
+                        st.session_state["sales_df"] = st.session_state["sales_df"][st.session_state["sales_df"]["member_id"].astype(str) != str(m_id)]
+
                     members = members[members["member_id"].astype(str) != str(m_id)]
                     save_members(members)
 
                     if memo_open_id == m_id:
                         st.session_state["memo_open_id"] = None
-                    st.toast(f"'{m['name']}' 회원의 데이터가 삭제되었습니다.")
+                    st.toast(f"'{m['name']}' 회원의 모든 데이터(수업예약/일지/설계서 등)가 완전 삭제되었습니다.")
                     rerun()
 
             if re_pay_open_id == m_id:
