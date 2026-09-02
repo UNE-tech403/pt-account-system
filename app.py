@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (달력 UI 직관성 강화 & DB 매출 완전 보장)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (대형 달력 레이아웃 & 매출 완벽 연동 보장)
 ================================================================================
 """
 
@@ -84,7 +84,7 @@ CUSTOM_CSS = f"""
     div.stButton > button {{ border-radius: 10px; font-weight: 700; }}
 
     .slot-booked {{ background:{COLOR_ICE}; border-radius:8px; padding:12px; font-size:15px; border-left: 4px solid {COLOR_BLUE}; }}
-    .cal-weekday {{ text-align:center; font-weight:800; color:#64748B; font-size:13px; padding-bottom:6px; }}
+    .cal-weekday {{ text-align:center; font-weight:800; color:#64748B; font-size:14px; padding-bottom:8px; }}
 
     .custom-item-card {{
         background: #FFFFFF;
@@ -296,7 +296,7 @@ def refine_raw_text(text):
 
 
 # =========================================================
-# 2. Supabase DB 데이터 관리 함수 (매출 보장 수정을 반영한 안전 로직)
+# 2. Supabase DB 데이터 관리 함수
 # =========================================================
 def load_data(table_name, columns):
     try:
@@ -631,7 +631,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
     m_logs = logs_copy[logs_copy["month_p"] == this_month]
     m_logs_count = len(m_logs)
 
-    # sales_df 기준 확정 매출 독립 집계
+    # sales_df 실매출 안전 매핑
     current_sales = st.session_state.get("sales_df", sales)
     sales_copy = current_sales.copy()
     sales_copy["month_p"] = pd.to_datetime(sales_copy["date"], errors="coerce").dt.to_period("M")
@@ -794,8 +794,9 @@ def page_dashboard(members, logs, sales, reports, bookings):
         st.markdown(f"현재 세션이 3회 이하로 남은 회원: &nbsp;&nbsp; {' &nbsp; | &nbsp; '.join(exp_names)}", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # [수정] 대형 달력 레이아웃 (Full Width 확장 및 하단 스케줄 카드)
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
-    st.markdown("#### 📅 수업 일정 달력 및 일별 출석/결석 스케줄")
+    st.markdown("#### 📅 수업 일정 달력")
 
     if "dash_selected_date" not in st.session_state:
         st.session_state["dash_selected_date"] = today.isoformat()
@@ -804,123 +805,123 @@ def page_dashboard(members, logs, sales, reports, bookings):
     if "dash_cal_month" not in st.session_state:
         st.session_state["dash_cal_month"] = today.month
 
-    c_cal, c_detail = st.columns([1.1, 1.2])
-
     active_bookings = bookings[bookings["status"] != "취소"]
 
-    with c_cal:
-        d_year = st.session_state["dash_cal_year"]
-        d_month = st.session_state["dash_cal_month"]
+    d_year = st.session_state["dash_cal_year"]
+    d_month = st.session_state["dash_cal_month"]
 
-        nav1, nav2, nav3 = st.columns([1, 2, 1])
-        if nav1.button("◀ 이전 달", key="dash_prev_m", use_container_width=True):
-            d_month -= 1
-            if d_month == 0: d_month = 12; d_year -= 1
-            st.session_state["dash_cal_year"], st.session_state["dash_cal_month"] = d_year, d_month
-            rerun()
-        nav2.markdown(f"<h4 style='text-align:center;margin:0;'>{d_year}년 {d_month}월</h4>", unsafe_allow_html=True)
-        if nav3.button("다음 달 ▶", key="dash_next_m", use_container_width=True):
-            d_month += 1
-            if d_month == 13: d_month = 1; d_year += 1
-            st.session_state["dash_cal_year"], st.session_state["dash_cal_month"] = d_year, d_month
-            rerun()
+    nav1, nav2, nav3 = st.columns([1, 4, 1])
+    if nav1.button("◀ 이전 달", key="dash_prev_m", use_container_width=True):
+        d_month -= 1
+        if d_month == 0: d_month = 12; d_year -= 1
+        st.session_state["dash_cal_year"], st.session_state["dash_cal_month"] = d_year, d_month
+        rerun()
+    nav2.markdown(f"<h3 style='text-align:center;margin:0;color:{COLOR_NAVY};'>{d_year}년 {d_month}월</h3>", unsafe_allow_html=True)
+    if nav3.button("다음 달 ▶", key="dash_next_m", use_container_width=True):
+        d_month += 1
+        if d_month == 13: d_month = 1; d_year += 1
+        st.session_state["dash_cal_year"], st.session_state["dash_cal_month"] = d_year, d_month
+        rerun()
 
-        st.write("")
-        weekday_cols = st.columns(7)
-        for wc, label in zip(weekday_cols, WEEKDAY_LABELS_KR):
-            wc.markdown(f"<div class='cal-weekday'>{label}</div>", unsafe_allow_html=True)
+    st.write("")
+    weekday_cols = st.columns(7)
+    for wc, label in zip(weekday_cols, WEEKDAY_LABELS_KR):
+        wc.markdown(f"<div class='cal-weekday'>{label}</div>", unsafe_allow_html=True)
 
-        cal_obj = calendar.Calendar(firstweekday=6)
-        month_weeks = cal_obj.monthdayscalendar(d_year, d_month)
+    cal_obj = calendar.Calendar(firstweekday=6)
+    month_weeks = cal_obj.monthdayscalendar(d_year, d_month)
 
-        for week in month_weeks:
-            week_cols = st.columns(7)
-            for wc, day_num in zip(week_cols, week):
-                if day_num == 0:
-                    wc.write("")
-                    continue
-                this_date = date(d_year, d_month, day_num).isoformat()
-                day_b_cnt = len(active_bookings[active_bookings["date"] == this_date])
-                is_selected = (this_date == st.session_state["dash_selected_date"])
-                is_today = (this_date == today.isoformat())
+    for week in month_weeks:
+        week_cols = st.columns(7)
+        for wc, day_num in zip(week_cols, week):
+            if day_num == 0:
+                wc.write("")
+                continue
+            this_date = date(d_year, d_month, day_num).isoformat()
+            day_b_cnt = len(active_bookings[active_bookings["date"] == this_date])
+            is_selected = (this_date == st.session_state["dash_selected_date"])
+            is_today = (this_date == today.isoformat())
 
-                # [달력 UI 개선] 예약 스케줄 존재 시 파란색 카운트 뱃지로 눈에 띄게 강조
-                if day_b_cnt > 0:
-                    label = f"📅 {day_num}일 ({day_b_cnt}건)"
-                else:
-                    label = f"{day_num}"
+            # 예약이 있는 일자 시각화 대폭 강조 (파란 배지)
+            if day_b_cnt > 0:
+                label = f"🔵 {day_num}일 ({day_b_cnt}건)"
+            else:
+                label = f"{day_num}"
 
-                if is_today:
-                    label = f"📌 {label}"
+            if is_today:
+                label = f"📌오늘 {label}"
 
-                btn_type = "primary" if is_selected else "secondary"
-                if wc.button(label, key=f"dash_cal_day_{this_date}", use_container_width=True, type=btn_type):
-                    st.session_state["dash_selected_date"] = this_date
-                    rerun()
+            btn_type = "primary" if is_selected else "secondary"
+            if wc.button(label, key=f"dash_cal_day_{this_date}", use_container_width=True, type=btn_type):
+                st.session_state["dash_selected_date"] = this_date
+                rerun()
 
-    with c_detail:
-        sel_date_str = st.session_state["dash_selected_date"]
-        st.markdown(f"##### 📌 **{sel_date_str}** 수업 스케줄")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        day_bookings = active_bookings[active_bookings["date"] == sel_date_str]
+    # [수정] 대형 달력 아래로 빼서 널찍하게 구성된 일별 수업 스케줄 카드
+    sel_date_str = st.session_state["dash_selected_date"]
+    st.markdown('<div class="pt-card" style="border-top: 4px solid #2563EB;">', unsafe_allow_html=True)
+    st.markdown(f"#### 📌 **{sel_date_str}** 상세 수업 스케줄")
 
-        if day_bookings.empty:
+    day_bookings = active_bookings[active_bookings["date"] == sel_date_str]
+
+    if day_bookings.empty:
+        st.info(f"{sel_date_str}에 예정된 수업 예약이 없습니다.")
+    else:
+        merged_day_b = day_bookings.merge(members[["member_id", "name", "gender", "total_sessions", "remaining_sessions"]], on="member_id", how="inner")
+        
+        if merged_day_b.empty:
             st.info(f"{sel_date_str}에 예정된 수업 예약이 없습니다.")
         else:
-            merged_day_b = day_bookings.merge(members[["member_id", "name", "gender", "total_sessions", "remaining_sessions"]], on="member_id", how="inner")
-            
-            if merged_day_b.empty:
-                st.info(f"{sel_date_str}에 예정된 수업 예약이 없습니다.")
-            else:
-                st.success(f"총 **{len(merged_day_b)}개**의 수업이 있습니다.")
+            st.success(f"총 **{len(merged_day_b)}개**의 수업이 예약되어 있습니다.")
 
-                for idx, b_row in merged_day_b.sort_values("time_slot").iterrows():
-                    s_time = str(b_row.get("time_slot") or "10:00").strip()
-                    sh, sm = map(int, s_time.split(":"))
-                    e_time = (datetime(2026, 1, 1, sh, sm) + timedelta(minutes=50)).strftime("%H:%M")
-                    
-                    m_id = int(b_row["member_id"])
-                    m_name = b_row.get("name") or "회원"
-                    m_gender = b_row.get("gender") or "남성"
-                    
-                    m_log = logs[
-                        (logs["date"].astype(str) == sel_date_str) & 
-                        (pd.to_numeric(logs["member_id"], errors="coerce") == m_id) & 
-                        (logs["start_time"].astype(str) == s_time)
-                    ]
-                    
-                    att_status = "미체크"
-                    if not m_log.empty:
-                        cur_att = str(m_log.iloc[0].get("attendance") or "").strip()
-                        if cur_att in ["출석", "결석", "노쇼"]:
-                            att_status = cur_att
+            for idx, b_row in merged_day_b.sort_values("time_slot").iterrows():
+                s_time = str(b_row.get("time_slot") or "10:00").strip()
+                sh, sm = map(int, s_time.split(":"))
+                e_time = (datetime(2026, 1, 1, sh, sm) + timedelta(minutes=50)).strftime("%H:%M")
+                
+                m_id = int(b_row["member_id"])
+                m_name = b_row.get("name") or "회원"
+                m_gender = b_row.get("gender") or "남성"
+                
+                m_log = logs[
+                    (logs["date"].astype(str) == sel_date_str) & 
+                    (pd.to_numeric(logs["member_id"], errors="coerce") == m_id) & 
+                    (logs["start_time"].astype(str) == s_time)
+                ]
+                
+                att_status = "미체크"
+                if not m_log.empty:
+                    cur_att = str(m_log.iloc[0].get("attendance") or "").strip()
+                    if cur_att in ["출석", "결석", "노쇼"]:
+                        att_status = cur_att
 
-                    g_badge = get_gender_badge_html(m_gender)
-                    att_badge = get_attendance_badge_html(att_status)
+                g_badge = get_gender_badge_html(m_gender)
+                att_badge = get_attendance_badge_html(att_status)
 
-                    st.markdown(f"""
-                    <div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:8px; padding:12px 16px; margin-bottom:6px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <span style="font-size:16px; font-weight:800; color:{COLOR_NAVY};">👤 {m_name} 회원님</span> {g_badge} {att_badge}
-                            </div>
-                            <div style="font-weight:800; font-size:13px; color:{COLOR_BLUE};">
-                                ⏰ {s_time} ~ {e_time}
-                            </div>
+                st.markdown(f"""
+                <div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:10px; padding:14px 20px; margin-bottom:8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <span style="font-size:17px; font-weight:800; color:{COLOR_NAVY};">👤 {m_name} 회원님</span> {g_badge} {att_badge}
+                        </div>
+                        <div style="font-weight:800; font-size:15px; color:{COLOR_BLUE};">
+                            ⏰ {s_time} ~ {e_time}
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
 
-                    btn_c1, btn_c2, _ = st.columns([1, 1, 2])
-                    if btn_c1.button("🟢 출석", key=f"dash_att_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
-                        update_attendance_log(m_id, sel_date_str, s_time, e_time, "출석")
-                        st.toast(f"🎉 {m_name} 회원 ({s_time}) 출석 처리 완료")
-                        rerun()
+                btn_c1, btn_c2, _ = st.columns([1, 1, 4])
+                if btn_c1.button("🟢 출석 완료", key=f"dash_att_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
+                    update_attendance_log(m_id, sel_date_str, s_time, e_time, "출석")
+                    st.toast(f"🎉 {m_name} 회원 ({s_time}) 출석 처리 완료")
+                    rerun()
 
-                    if btn_c2.button("🔴 결석(노쇼)", key=f"dash_abs_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
-                        update_attendance_log(m_id, sel_date_str, s_time, e_time, "결석")
-                        st.toast(f"🔴 {m_name} 회원 ({s_time}) 노쇼/결석 처리 완료")
-                        rerun()
+                if btn_c2.button("🔴 결석/노쇼", key=f"dash_abs_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
+                    update_attendance_log(m_id, sel_date_str, s_time, e_time, "결석")
+                    st.toast(f"🔴 {m_name} 회원 ({s_time}) 노쇼/결석 처리 완료")
+                    rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -950,7 +951,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (달력 예약 시각성 강조 & 지나간 시간대 완벽 필터링)
+# 5. 페이지: 수업 등록 (대형 달력 및 한국 표준시 엄격 적용)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
@@ -970,7 +971,7 @@ def page_booking(members, bookings):
 
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
 
-    nav1, nav2, nav3 = st.columns([1, 3, 1])
+    nav1, nav2, nav3 = st.columns([1, 4, 1])
     if nav1.button("◀ 이전 달", use_container_width=True):
         month -= 1
         if month == 0:
@@ -978,7 +979,7 @@ def page_booking(members, bookings):
             year -= 1
         st.session_state["cal_year"], st.session_state["cal_month"] = year, month
         rerun()
-    nav2.markdown(f"<h3 style='text-align:center;margin:0;'>{year}년 {month}월</h3>", unsafe_allow_html=True)
+    nav2.markdown(f"<h3 style='text-align:center;margin:0;color:{COLOR_NAVY};'>{year}년 {month}월</h3>", unsafe_allow_html=True)
     if nav3.button("다음 달 ▶", use_container_width=True):
         month += 1
         if month == 13:
@@ -1009,14 +1010,13 @@ def page_booking(members, bookings):
             is_selected = (this_date == st.session_state["selected_cal_date"])
             is_today = (this_date == today_str)
 
-            # [달력 UI 시각화 강화] 수업 건수가 있는 날은 직관적인 카운트 뱃지로 표시
             if day_count > 0:
-                label = f"📅 {day_num}일 ({day_count}건)"
+                label = f"🔵 {day_num}일 ({day_count}건)"
             else:
                 label = f"{day_num}"
 
             if is_today:
-                label = f"📌 {label}"
+                label = f"📌오늘 {label}"
 
             btn_type = "primary" if is_selected else "secondary"
             if wc.button(label, key=f"cal_day_{this_date}", use_container_width=True, type=btn_type):
@@ -1026,7 +1026,7 @@ def page_booking(members, bookings):
     st.markdown('</div>', unsafe_allow_html=True)
 
     sel_date = st.session_state["selected_cal_date"]
-    st.markdown('<div class="pt-card">', unsafe_allow_html=True)
+    st.markdown('<div class="pt-card" style="border-top: 4px solid #2563EB;">', unsafe_allow_html=True)
     st.subheader(f"📌 {sel_date} 예정된 전체 수업 목록")
 
     if members.empty:
@@ -1060,13 +1060,11 @@ def page_booking(members, bookings):
         st.markdown("---")
         st.markdown("##### ➕ 신규 수업 예약 등록")
 
-        # [시간 필터링] 한국 표준시 기준 지난 시각(Hour) 완전 제거
         valid_slots = []
         for slot in TIME_SLOTS:
             sh, sm = map(int, slot.split(":"))
             
             if sel_date == today_str:
-                # KST 시각의 Hour(08시)보다 큰 미래 정시 시간대만 수용
                 if sh > kst_now.hour:
                     valid_slots.append(slot)
             elif sel_date > today_str:
@@ -1646,7 +1644,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리
+# 9. 페이지: 회원 관리 (신규 등록 매출 100% 동기화 보장)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1705,7 +1703,7 @@ def page_members(members, sales, bookings, logs, reports):
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         save_members(members)
 
-                        # 확정 실매출 데이터 저장
+                        # [해결 1] 확정 매출 등록 (Supabase 및 메모리 동시 강제 갱신)
                         new_s = {
                             "sale_id": next_id(sales, "sale_id"), 
                             "member_id": new_m_id, 
@@ -1718,7 +1716,7 @@ def page_members(members, sales, bookings, logs, reports):
                         save_sales(updated_sales)
 
                         st.session_state["show_reg_modal"] = False
-                        st.toast(f"'{name}' ({gender}) 회원이 등록되고 확정 매출({amount:,.0f}원)이 반영되었습니다.")
+                        st.toast(f"'{name}' ({gender}) 회원이 등록되고 확정 매출({amount:,.0f}원)이 계상되었습니다.")
                         rerun()
 
     tab1, tab2 = st.tabs(["📋 회원 세션 관리 & 메모/사전설문", "💰 월별 매출 통합 분석"])
