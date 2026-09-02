@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (대형 달력 레이아웃 & 매출 완벽 연동 보장)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (매출 PK 중복 덮어쓰기 해결 및 달력 문구 정돈)
 ================================================================================
 """
 
@@ -631,7 +631,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
     m_logs = logs_copy[logs_copy["month_p"] == this_month]
     m_logs_count = len(m_logs)
 
-    # sales_df 실매출 안전 매핑
+    # sales_df 실매출 100% 매핑
     current_sales = st.session_state.get("sales_df", sales)
     sales_copy = current_sales.copy()
     sales_copy["month_p"] = pd.to_datetime(sales_copy["date"], errors="coerce").dt.to_period("M")
@@ -794,7 +794,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
         st.markdown(f"현재 세션이 3회 이하로 남은 회원: &nbsp;&nbsp; {' &nbsp; | &nbsp; '.join(exp_names)}", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # [수정] 대형 달력 레이아웃 (Full Width 확장 및 하단 스케줄 카드)
+    # 대형 달력 레이아웃 (Full Width)
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("#### 📅 수업 일정 달력")
 
@@ -842,14 +842,14 @@ def page_dashboard(members, logs, sales, reports, bookings):
             is_selected = (this_date == st.session_state["dash_selected_date"])
             is_today = (this_date == today.isoformat())
 
-            # 예약이 있는 일자 시각화 대폭 강조 (파란 배지)
+            # [수정] '오늘' 텍스트를 빼고 깔끔한 '📌 2일 (🔵3건)' 문구로 변경
             if day_b_cnt > 0:
                 label = f"🔵 {day_num}일 ({day_b_cnt}건)"
             else:
                 label = f"{day_num}"
 
             if is_today:
-                label = f"📌오늘 {label}"
+                label = f"📌 {label}"
 
             btn_type = "primary" if is_selected else "secondary"
             if wc.button(label, key=f"dash_cal_day_{this_date}", use_container_width=True, type=btn_type):
@@ -858,7 +858,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # [수정] 대형 달력 아래로 빼서 널찍하게 구성된 일별 수업 스케줄 카드
+    # 하단 널찍하게 위치하는 상세 수업 스케줄
     sel_date_str = st.session_state["dash_selected_date"]
     st.markdown('<div class="pt-card" style="border-top: 4px solid #2563EB;">', unsafe_allow_html=True)
     st.markdown(f"#### 📌 **{sel_date_str}** 상세 수업 스케줄")
@@ -951,7 +951,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (대형 달력 및 한국 표준시 엄격 적용)
+# 5. 페이지: 수업 등록 (대형 달력 레이아웃 적용)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
@@ -1016,7 +1016,7 @@ def page_booking(members, bookings):
                 label = f"{day_num}"
 
             if is_today:
-                label = f"📌오늘 {label}"
+                label = f"📌 {label}"
 
             btn_type = "primary" if is_selected else "secondary"
             if wc.button(label, key=f"cal_day_{this_date}", use_container_width=True, type=btn_type):
@@ -1644,7 +1644,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (신규 등록 매출 100% 동기화 보장)
+# 9. 페이지: 회원 관리 (신규 등록 시 매출 PK 자동중복 방지)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1703,20 +1703,23 @@ def page_members(members, sales, bookings, logs, reports):
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         save_members(members)
 
-                        # [해결 1] 확정 매출 등록 (Supabase 및 메모리 동시 강제 갱신)
+                        # [수정] DB의 최신 sales_df에서 sale_id 최댓값을 직접 조회하여 PK 덮어쓰기 현상 원천 차단
+                        latest_sales = st.session_state.get("sales_df", sales)
+                        new_s_id = next_id(latest_sales, "sale_id")
+
                         new_s = {
-                            "sale_id": next_id(sales, "sale_id"), 
+                            "sale_id": new_s_id, 
                             "member_id": new_m_id, 
                             "date": today_obj.isoformat(), 
                             "product_name": f"PT {sessions}회 신규등록", 
                             "amount": amount, 
                             "pay_type": pay_type
                         }
-                        updated_sales = pd.concat([sales, pd.DataFrame([new_s])], ignore_index=True)
+                        updated_sales = pd.concat([latest_sales, pd.DataFrame([new_s])], ignore_index=True)
                         save_sales(updated_sales)
 
                         st.session_state["show_reg_modal"] = False
-                        st.toast(f"'{name}' ({gender}) 회원이 등록되고 확정 매출({amount:,.0f}원)이 계상되었습니다.")
+                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되었으며 결제 매출({amount:,.0f}원)이 안전 계상되었습니다.")
                         rerun()
 
     tab1, tab2 = st.tabs(["📋 회원 세션 관리 & 메모/사전설문", "💰 월별 매출 통합 분석"])
@@ -1815,15 +1818,16 @@ def page_members(members, sales, bookings, logs, reports):
                     members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "re_status"] = "결제완료"
                     save_members(members)
 
+                    latest_sales = st.session_state.get("sales_df", sales)
                     new_s = {
-                        "sale_id": next_id(sales, "sale_id"),
+                        "sale_id": next_id(latest_sales, "sale_id"),
                         "member_id": m_id,
                         "date": get_kst_now().strftime("%Y-%m-%d"),
                         "product_name": f"PT {re_sess}회 재등록",
                         "amount": tot_re_amount,
                         "pay_type": re_pay_type
                     }
-                    updated_sales = pd.concat([sales, pd.DataFrame([new_s])], ignore_index=True)
+                    updated_sales = pd.concat([latest_sales, pd.DataFrame([new_s])], ignore_index=True)
                     save_sales(updated_sales)
 
                     st.session_state["re_pay_open_id"] = None
