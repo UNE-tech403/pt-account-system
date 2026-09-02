@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (AI 리포트 항목별 자동 분할 저장 반영)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (AI RAW 데이터 고도화 가공 엔진 탑재)
 ================================================================================
 """
 
@@ -263,32 +263,30 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 '{t}' 요소를 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
+# [핵심] RAW 데이터 전문 고도화 정제기 (복사 붙여넣기 차단)
 def refine_raw_text(text):
     if not text:
         return "체형 밸런스 개선 및 안정적인 신체 정렬 확보"
     
     t = str(text).strip()
     
+    # 구어체 및 단문 메모를 전문 해부학/역학 용어로 변환하는 규칙
     replacements = [
-        (r"오른쪽.*골반.*틀어짐|골반.*오른쪽|오른쪽으로.*골반", "골반 우측 변위(Pelvic Deviation) 및 좌우 밸런스 불균형"),
-        (r"골반틀어짐.*불균형|골반.*틀어짐|골반.*불균형", "골반 비대칭 및 골반대(Pelvic Girdle) 정렬 불균형"),
-        (r"대퇴근.*타이트.*안나옴|대퇴근.*타이트|타이트.*안나옴|움직임.*안나옴", "대퇴사두근 및 주변 근막의 긴장으로 인한 관절 가동 범위(ROM) 제한"),
-        (r"라운드숄더|말린어깨|어깨.*말림", "상체 경추 및 흉추부 굴곡으로 인한 라운드 숄더 불균형"),
-        (r"전방경사.*관찰됨|전방경사", "골반 전방 경사(Pelvic Anterior Tilt) 패턴으로 인한 허리 하중 집중"),
-        (r"후방경사", "골반 후방 경사(Pelvic Posterior Tilt)에 따른 코어 복압 저하"),
-        (r"기초\s*스트레칭.*하체|하체운동.*진행|하체운동", "하체 관절 가동성 확보 및 주동근 고립 트레이닝"),
-        (r"스쿼트.*하체운동|스쿼트", "하체 하중 분산 및 골격근 지지력 향상 훈련"),
-        (r"자극점.*타겟.*좋음|자극.*좋음|타겟.*좋음", "목표 주동근의 정확한 자극점 전달 및 활성화"),
-        (r"안정성.*필요|몸.*흔들림|흔들림.*필요", "동작 수행 시 중심부 지지력을 향상시켜 움직임의 안정성 확보"),
-        (r"처음.*자세.*잘\s*잡힘|처음인데.*잘함|자세\s*좋음", "올바른 관절 정렬과 신체 인지 능력 기반의 안정적인 궤적 형성"),
-        (r"복압\s*형성\s*미비|복압\s*미비|복압\s*약함", "복부 내압(Core Intra-abdominal Pressure) 유지 능력 보완"),
-        (r"체중\s*안\s*늘어서|체중\s*늘리고\s*싶어하심|살\s*찌우고\s*싶어함", "체지방 증가 최소화 기반 점진적 골격근량 증량 및 체중 증대"),
+        # 유연성 및 부상위험 메모 고도화
+        (r"유연.*부상위험.*적으실듯|유연.*부상위험|유연하셔서|부상위험.*적음|부상위험.*적으실듯", 
+         "주요 관절의 가동 범위(ROM)가 양호한 상태이나, 과가동성(Hyper-mobility)으로 인한 제어력 저하를 방지하기 위해 관절 고립력 및 코어 지지력 강화 트레이닝 적용"),
+        
+        # 골반 관련 고도화
+        (r"오른쪽.*골반.*틀어짐|골반.*오른쪽|오른쪽으로.*골반", "골반 우측 변위(Pelvic Lateral Deviation) 및 골반대(Pelvic Girdle) 정렬 불균형"),
+        (r"전방경사.*골반|골반.*전방경사|전방경사", "골반 전방 경사(Pelvic Anterior Tilt) 패턴으로 인한 요추 하중 집중 및 요부 근막 긴장"),
+        (r"후방경사", "골반 후방 경사(Pelvic Posterior Tilt)에 따른 복부 내압 저하 및 둔근 활성화 제한"),
+        (r"골반틀어짐.*불균형|골반.*틀어짐|골반.*불균형", "골반 비대칭으로 인한 신체 좌우 지지 밸런스 저하"),
+
+        # 운동 진행 메모 고도화
+        (r"호흡교정.*스쿼트|호흡교정|스쿼트", "횡격막 호흡 정렬을 통한 코어 복압 확보 및 하체 하중 분산 메커니즘 훈련"),
+        (r"기초\s*스트레칭.*하체|하체운동.*진행|하체운동", "하체 관절 가동성 확보 및 주동근 수축 자극 극대화 훈련"),
         (r"다이어트|살\s*빼고\s*싶어함|체지방\s*감량", "체지방 순감량 및 신체 밸런스 라인 형성"),
-        (r"오다리|O다리|오다리교정", "하체 하중 분산 및 휜 다리(내반슬) 체형 밸런스 교정"),
-        (r"허리/골반\s*불균형|골반\s*기울임", "골반 및 척추의 가동 정렬 불균형 교정"),
-        (r"목과\s*어깨\s*주변\s*뭉침|어깨\s*뭉침", "경추 및 상체 긴장근 이완 및 관절 정상 가동 범위 확보"),
-        (r"무릎\s*안쪽\s*쏠림|무릎\s*쏠림", "하체 하중 분산 및 무릎 내반 정렬 안정화"),
-        (r"승모근\s*힘\s*개입|승모근\s*개입", "상체 운동 시 승모근 보상 작용 차단 및 타겟근 고립"),
+        (r"근력증가|근력강화", "점진적 과부하 원칙 기반의 골격근량 증대 및 전신 지지력 향상"),
     ]
     
     for pattern, repl in replacements:
@@ -819,6 +817,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
         st.markdown(f"현재 세션이 3회 이하로 남은 회원: &nbsp;&nbsp; {' &nbsp; | &nbsp; '.join(exp_names)}", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # 대형 달력 레이아웃
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("#### 📅 수업 일정 달력")
 
@@ -881,7 +880,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # [요청 반영] 각 회원별 잔여회차 뱃지(⏳ 잔여 00회) 표기 적용
+    # [수정] 대시보드 하단 상세 수업 스케줄 내 회원 잔여 횟수(⏳ 잔여 00회) 적용
     sel_date_str = st.session_state["dash_selected_date"]
     st.markdown('<div class="pt-card" style="border-top: 4px solid #2563EB;">', unsafe_allow_html=True)
     st.markdown(f"#### 📌 **{sel_date_str}** 상세 수업 스케줄")
@@ -1356,7 +1355,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서
+# 7. 페이지: AI 내 몸 변화 설계서 (자동 분할 저장 및 파싱)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1446,7 +1445,7 @@ def page_bodyplan(members, reports):
 
         components.html(preview_html, height=850, scrolling=True)
 
-    # 개별 회원 설계서 작성 폼
+    # [수정] 개별 회원 설계서 작성 폼 (AI 고도화 파싱을 적용하여 각 항목에 자동 분할 입력)
     if st.session_state.get("editing_member_id"):
         e_id = int(st.session_state.get("editing_member_id"))
         selected_m = members[pd.to_numeric(members["member_id"], errors="coerce") == e_id].iloc[0]
@@ -1484,33 +1483,36 @@ def page_bodyplan(members, reports):
             key=f"input_func_{e_id}"
         )
 
+        # [고도화] AI 에이전트 생성 클릭 시 각 세부 입력란으로 자동 분할 파싱
         if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
             refined_goal = refine_raw_text(goal_input)
             refined_journal = refine_raw_text(raw_journal)
             refined_posture = refine_raw_text(raw_posture)
             refined_func = refine_raw_text(raw_func)
 
+            # 1. 신체 정밀 종합 분석란으로 파싱 분할
             st.session_state[f"ta_analysis_{e_id}"] = f"""[신체 정밀 종합 분석]
-{selected_m['name']} 회원님의 개별 신체 정렬과 운동 목적을 정밀 분석한 결과, 핵심 개선 과제는 {refined_goal}입니다.
+{selected_m['name']} 회원님의 정밀 신체 평가 결과, 핵심 개선 과제는 '{refined_goal}'입니다.
 
-자세 및 기능 평가 결과 {refined_posture} 상태와 더불어 {refined_func} 현상이 확인되었습니다. 이러한 보상 작용을 원천 케어하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 바탕으로 관절 가동 범위를 개선하고 타겟 주동근 자극을 극대화하는 3단계 맞춤 로드맵을 적용합니다."""
+자세 평가상 {refined_posture} 상태가 관찰되었으며, 움직임 기능 검사에서 {refined_func} 현상이 함께 확인되었습니다. 이러한 보상 패턴을 개선하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 기반으로 관절 가동 범위를 확보하고 주동근 고립 자극을 극대화하는 3단계 로드맵을 적용합니다."""
 
-            st.session_state[f"ai_posture_text_{e_id}"] = f"체형 정렬 평가: {refined_posture} 상태가 관찰됨에 따라 좌우 밸런스 및 관절 정렬 케어 진행"
-            st.session_state[f"ai_func_text_{e_id}"] = f"동작 가동성 평가: {refined_func} 현상이 확인되어 주동근 고립 및 보상 근육 개입 방지 훈련 실시"
+            st.session_state[f"ai_posture_text_{e_id}"] = f"체형 정렬 평가: {refined_posture}"
+            st.session_state[f"ai_func_text_{e_id}"] = f"동작 가동성 평가: {refined_func}"
 
-            st.session_state[f"ta_p1_{e_id}"] = "Phase 1 [1-4주차: 굳은 관절 이완 & 바른 호흡 정렬 익히기]\n• 타이트해진 발목 및 흉추 관절의 가동 범위를 부드럽게 확보\n• 횡격막 호흡 및 코어 근육 활성화를 통해 신체 중심부 정렬 바로잡기"
-            st.session_state[f"ta_p2_{e_id}"] = "Phase 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 승모근 및 기타 보상 작용 없이 타겟 주동근에 확실한 자극 고립\n• 바른 동작 궤적 내에서 점진적 과부하 원칙을 적용한 맞춤 중량 훈련"
-            st.session_state[f"ta_p3_{e_id}"] = "Phase 3 [9-12주차: 체력 및 근지구력 극대화 & 자율 독립 루틴 완성]\n• 수행 능력을 극대화하는 정밀 기술 세트 적용\n• 회원님 맞춤 자율 운동 프로그램을 완벽히 체득하여 독립적인 운동 자립 완성"
+            # 2. Phase 1~3 로드맵 각 항목으로 파싱 분할
+            st.session_state[f"ta_p1_{e_id}"] = f"Phase 1 [1-4주차: 관절 이완 & 호흡 정렬 익히기]\n• 타이트해진 근막 이완 및 횡격막 호흡 정렬\n• 훈련 성과 반영: {refined_journal}"
+            st.session_state[f"ta_p2_{e_id}"] = f"Phase 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 보상 작용 없이 주동근 고립 자극 전달\n• 개선 과제 반영: {refined_posture} 케어"
+            st.session_state[f"ta_p3_{e_id}"] = f"Phase 3 [9-12주차: 체력 극대화 & 자율 독립 루틴 완성]\n• 맞춤형 자율 운동 프로그램 체득 및 운동 자립 완성\n• 개선 과제 반영: {refined_func} 예방"
 
-            st.session_state[f"ta_comment_{e_id}"] = f"""{selected_m['name']} 회원님, 반갑습니다! 담당 트레이너 {MY_NAME}입니다.
+            # 3. 트레이너 코멘트란으로 파싱 분할
+            st.session_state[f"ta_comment_{e_id}"] = f""""{selected_m['name']} 님을 위한 {MY_NAME} 트레이너의 진심 어린 한마디"
 
-운동을 시작하실 때 가장 중요한 것은 단순히 몸을 움직이는 것을 넘어, 내 몸이 어떤 균형 상태에 있는지를 명확히 알고 바른 방향으로 차근차근 나아가는 것입니다.
+{selected_m['name']} 회원님, 담당 트레이너 {MY_NAME}입니다.
+현재 회원님께서 고민하시는 신체 목표나 움직임의 제한은 정확한 생체역학적 원인 분석과 체계적인 로드맵을 통해 충분히 개선할 수 있습니다. 
 
-현재 회원님께서 고민하시는 신체 목표나 움직임의 제한은 체계적인 운동 로드맵을 통해 충분히 개선할 수 있습니다. 준비해 드린 12주간의 Phase 플랜을 바탕으로 차근차근 단계를 밟아 나간다면, 불균형했던 관절 정렬이 제자리를 찾고 타겟 근육에 또렷한 자극이 전달되는 긍정적인 변화를 직접 경험하시게 될 것입니다.
+준비해 드린 12주 간의 Phase 플랜을 따라 차근차근 나아간다면, 불균형했던 관절 정렬이 제자리를 찾고 한층 새로워진 몸의 변화를 직접 경험하시게 될 것입니다. 저를 믿고 편안한 마음으로 따라와 주세요! 화이팅! 🔥"""
 
-매 수업마다 회원님의 컨디션과 가동 범위를 세심하게 다듬고, 부상 위험 없이 안전하게 목표에 도달하실 수 있도록 옆에서 최선을 다해 가이드해 드리겠습니다. 저를 믿고 편안한 마음으로 따라와 주세요. 회원님의 활기찬 신체 변화 여정을 진심으로 응원합니다! 화이팅! 🔥"""
-
-            st.toast("전문 톤앤매너 가이드 및 장문 코멘트 작성이 완료되었습니다!")
+            st.toast("RAW 데이터가 고도화 정제되어 각 항목별로 분할 기입되었습니다!")
             rerun()
 
         default_analysis = r_row.get("analysis_text") if has_existing else ""
