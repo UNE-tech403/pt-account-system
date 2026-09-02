@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (대시보드 예약취소, 전문 placeholder, 달력 🟢체크 UI 반영 버전)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (RAW 데이터 정제 엔진 텍스트 오염 및 중복 완전 해결)
 ================================================================================
 """
 
@@ -263,32 +263,38 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 '{t}' 요소를 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
-def refine_raw_text(text):
+# [핵심 교정] 항목별 분리 정제 엔진 (텍스트 교차 오염 및 중복 결합 오류 원천 차단)
+def refine_raw_text(text, category="general"):
     if not text:
-        return "체형 밸런스 개선 및 안정적인 신체 정렬 확보"
+        return "신체 밸런스 개선 및 안정적인 정렬 확보"
     
     t = str(text).strip()
     
-    replacements = [
-        (r"유연.*부상위험.*적으실듯|유연.*부상위험|유연하셔서|부상위험.*적음|부상위험.*적으실듯", 
-         "주요 관절의 가동 범위(ROM)가 양호한 상태이나, 과가동성(Hyper-mobility)으로 인한 제어력 저하를 방지하기 위해 관절 고립력 및 코어 지지력 강화 트레이닝 적용"),
-        (r"오른쪽.*골반.*틀어짐|골반.*오른쪽|오른쪽으로.*골반", "골반 우측 변위(Pelvic Lateral Deviation) 및 골반대(Pelvic Girdle) 정렬 불균형"),
-        (r"전방경사.*골반|골반.*전방경사|전방경사", "골반 전방 경사(Pelvic Anterior Tilt) 패턴으로 인한 요추 하중 집중 및 요부 근막 긴장"),
-        (r"후방경사", "골반 후방 경사(Pelvic Posterior Tilt)에 따른 복부 내압 저하 및 둔근 활성화 제한"),
-        (r"골반틀어짐.*불균형|골반.*틀어짐|골반.*불균형", "골반 비대칭으로 인한 신체 좌우 지지 밸런스 저하"),
-        (r"호흡교정.*스쿼트|호흡교정|스쿼트", "횡격막 호흡 정렬을 통한 코어 복압 확보 및 하체 하중 분산 메커니즘 훈련"),
-        (r"기초\s*스트레칭.*하체|하체운동.*진행|하체운동", "하체 관절 가동성 확보 및 주동근 수축 자극 극대화 훈련"),
-        (r"다이어트|살\s*빼고\s*싶어함|체지방\s*감량", "체지방 순감량 및 신체 밸런스 라인 형성"),
-        (r"근력증가|근력강화", "점진적 과부하 원칙 기반의 골격근량 증대 및 전신 지지력 향상"),
-    ]
-    
-    for pattern, repl in replacements:
-        if re.search(pattern, t):
-            t = re.sub(pattern, repl, t)
-            break
-            
-    t = re.sub(r"\s+", " ", t).strip()
-    return t if t else text
+    if category == "goal":
+        if re.search(r"다이어트|근력증가|체지방", t):
+            return "체지방 순감량 및 골격근량 증대를 통한 신체 밸런스 라인 형성"
+        return t
+
+    elif category == "journal":
+        if re.search(r"호흡|스쿼트", t):
+            return "횡격막 호흡 패턴 재설정 및 하체 하중 분산 스쿼트 정렬 지도"
+        return t
+
+    elif category == "posture":
+        if re.search(r"골반.*전방경사|전방경사", t):
+            return "골반 전방 경사(Pelvic Anterior Tilt) 패턴으로 인한 요추 하중 집중 및 요부 근막 긴장"
+        elif re.search(r"오른쪽.*골반|골반.*틀어짐", t):
+            return "골반 우측 변위(Pelvic Lateral Deviation) 및 좌우 밸런스 불균형"
+        return t
+
+    elif category == "func":
+        if re.search(r"벗윙크|스쿼트", t):
+            return "딥 스쿼트 시 굴곡 제한에 따른 벗윙크(Butt Wink) 보상 작용 및 고관절 가동성 제한"
+        elif re.search(r"유연|부상위험", t):
+            return "관절 가동 범위(ROM)는 양호하나 과가동성(Hyper-mobility) 대비 고관절 고립력 보완 필요"
+        return t
+
+    return t
 
 
 # =========================================================
@@ -857,7 +863,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
             is_selected = (this_date == st.session_state["dash_selected_date"])
             is_today = (this_date == today.isoformat())
 
-            # 🟢 초록색 체크 시각화 적용
             if day_b_cnt > 0:
                 label = f"🟢 {day_num}일 ({day_b_cnt}건)"
             else:
@@ -870,7 +875,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 대시보드 당일 수업 스케줄
+    # 대시보드 당일 상세 수업 스케줄
     sel_date_str = st.session_state["dash_selected_date"]
     st.markdown('<div class="pt-card" style="border-top: 4px solid #2563EB;">', unsafe_allow_html=True)
     st.markdown(f"#### 📌 **{sel_date_str}** 상세 수업 스케줄")
@@ -946,7 +951,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
                         st.toast(f"🔄 {m_name} 회원 출결 초기화 완료 (잔여 세션 +1 복구)")
                         rerun()
 
-                    # [요청 반영] 대시보드 수업 스케줄 내 예약 취소 버튼
                     if btn_c4.button("❌ 예약 취소", key=f"dash_cancel_btn_{b_id}_{idx}_{s_time}", use_container_width=True):
                         bookings.loc[bookings["booking_id"] == b_id, "status"] = "취소"
                         save_bookings(bookings)
@@ -988,7 +992,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (🟢 초록 체크 적용)
+# 5. 페이지: 수업 등록
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
@@ -1047,7 +1051,6 @@ def page_booking(members, bookings):
             is_selected = (this_date == st.session_state["selected_cal_date"])
             is_today = (this_date == today_str)
 
-            # 🟢 초록색 체크 시각화 적용
             if day_count > 0:
                 label = f"🟢 {day_num}일 ({day_count}건)"
             else:
@@ -1356,7 +1359,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (전문 가이드 placeholder 적용)
+# 7. 페이지: AI 내 몸 변화 설계서 (전문 가이드 placeholder 최적화)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1446,7 +1449,7 @@ def page_bodyplan(members, reports):
 
         components.html(preview_html, height=850, scrolling=True)
 
-    # [수정] 전문 해부학/역학 가이드가 담긴 입력 필드 (placeholder 전문화)
+    # [수정] 전문 해부학 예시 가이드 반영 입력 필드
     if st.session_state.get("editing_member_id"):
         e_id = int(st.session_state.get("editing_member_id"))
         selected_m = members[pd.to_numeric(members["member_id"], errors="coerce") == e_id].iloc[0]
@@ -1485,10 +1488,10 @@ def page_bodyplan(members, reports):
         )
 
         if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
-            refined_goal = refine_raw_text(goal_input)
-            refined_journal = refine_raw_text(raw_journal)
-            refined_posture = refine_raw_text(raw_posture)
-            refined_func = refine_raw_text(raw_func)
+            refined_goal = refine_raw_text(goal_input, "goal")
+            refined_journal = refine_raw_text(raw_journal, "journal")
+            refined_posture = refine_raw_text(raw_posture, "posture")
+            refined_func = refine_raw_text(raw_func, "func")
 
             st.session_state[f"ta_analysis_{e_id}"] = f"""[신체 정밀 종합 분석]
 {selected_m['name']} 회원님의 정밀 신체 평가 결과, 핵심 개선 과제는 '{refined_goal}'입니다.
@@ -1534,8 +1537,8 @@ def page_bodyplan(members, reports):
         if col_save.button("🚀 최종 설계서 저장 및 리포트 완성", type="primary", use_container_width=True, key=f"btn_save_rep_{e_id}"):
             existing_mask = pd.to_numeric(reports["member_id"], errors="coerce") == e_id
 
-            posture_text = st.session_state.get(f"ai_posture_text_{e_id}", f"자세 평가: {refine_raw_text(raw_posture)}")
-            func_text = st.session_state.get(f"ai_func_text_{e_id}", f"움직임 평가: {refine_raw_text(raw_func)}")
+            posture_text = st.session_state.get(f"ai_posture_text_{e_id}", f"자세 평가: {refine_raw_text(raw_posture, 'posture')}")
+            func_text = st.session_state.get(f"ai_func_text_{e_id}", f"움직임 평가: {refine_raw_text(raw_func, 'func')}")
 
             if existing_mask.any():
                 reports.loc[existing_mask, ["date", "goal_text", "analysis_text", "posture_eval", "func_eval", "phase1_text", "phase2_text", "phase3_text", "trainer_comment", "status"]] = [
@@ -1846,7 +1849,7 @@ def page_members(members, sales, bookings, logs, reports):
 
                     if memo_open_id == m_id:
                         st.session_state["memo_open_id"] = None
-                    st.toast(f"'{m['name']}' 회원의 모든 데이터(수업예약/일지/설계서 등)가 완전 삭제되었습니다.")
+                    st.toast(f"'{m['name']}' 회원의 모든 데이터가 완전 삭제되었습니다.")
                     rerun()
 
             if re_pay_open_id == m_id:
