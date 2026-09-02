@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (매출 타임존/PK 버그 완벽 수정)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (출결 세션차감, KST 당일제한, 출결초기화, 자동스크롤 반영)
 ================================================================================
 """
 
@@ -393,25 +393,48 @@ def save_bookings(df):
     st.session_state["bookings_df"] = df
     save_data("bookings", df)
 
-def update_attendance_log(member_id, date_str, start_time_str, end_time_str, att_value):
+# [개선] 출석/노쇼 체크 시 세션 자동 차감 및 초기화 지원 헬퍼 함수
+def update_attendance_log_and_session(member_id, date_str, start_time_str, end_time_str, new_att_val):
     try:
         logs_df = st.session_state.get("logs_df", load_logs())
+        members_df = st.session_state.get("members_df", load_members())
+        
         mask = (logs_df["member_id"].astype(str) == str(member_id)) & (logs_df["date"] == date_str) & (logs_df["start_time"] == start_time_str)
+        prev_att_val = "미체크"
+        
         if mask.any():
-            logs_df.loc[mask, "attendance"] = att_value
+            prev_att_val = str(logs_df.loc[mask, "attendance"].values[0]).strip()
+            logs_df.loc[mask, "attendance"] = new_att_val
         else:
             new_id = next_id(logs_df, "log_id")
             new_row = {
                 "log_id": new_id, "member_id": member_id, "date": date_str,
                 "start_time": start_time_str, "end_time": end_time_str, "exercises_json": "[]",
-                "good_points": f"수업 {att_value} 처리", "improve_points": "",
-                "sent": False, "attendance": att_value
+                "good_points": f"수업 {new_att_val} 처리", "improve_points": "",
+                "sent": False, "attendance": new_att_val
             }
             logs_df = pd.concat([logs_df, pd.DataFrame([new_row])], ignore_index=True)
-        
+
         save_logs(logs_df)
+
+        # 회원 잔여 세션 차감/복구 연동 로직
+        m_mask = members_df["member_id"].astype(str) == str(member_id)
+        if m_mask.any():
+            cur_rem = safe_int(members_df.loc[m_mask, "remaining_sessions"].values[0], 0)
+            
+            # 1. 미체크 상태에서 출석/노쇼로 새로 변경하는 경우: 세션 -1 차감
+            if prev_att_val in ["미체크", ""] and new_att_val in ["출석", "결석", "노쇼"]:
+                if cur_rem > 0:
+                    members_df.loc[m_mask, "remaining_sessions"] = cur_rem - 1
+                    save_members(members_df)
+            
+            # 2. 이미 출석/노쇼 상태였는데 '미체크'로 초기화(취소)하는 경우: 세션 +1 복구
+            elif prev_att_val in ["출석", "결석", "노쇼"] and new_att_val == "미체크":
+                members_df.loc[m_mask, "remaining_sessions"] = cur_rem + 1
+                save_members(members_df)
+
     except Exception as e:
-        st.error(f"출결 동기화 오류: {e}")
+        st.error(f"출결 동기화 및 세션 차감 오류: {e}")
 
 def init_all_files():
     pass
@@ -621,6 +644,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
     kst_now = get_kst_now()
     today = kst_now.date()
+    today_str = today.isoformat()
     total_m = len(members)
     rem_sum = int(pd.to_numeric(members["remaining_sessions"], errors="coerce").fillna(0).sum())
 
@@ -842,7 +866,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
             is_selected = (this_date == st.session_state["dash_selected_date"])
             is_today = (this_date == today.isoformat())
 
-            # [수정] '오늘' 문구 제외, 파란 배지로 예약건 표시
+            # '오늘' 텍스트 제외, 파란 배지 시각화
             if day_b_cnt > 0:
                 label = f"🔵 {day_num}일 ({day_b_cnt}건)"
             else:
@@ -858,7 +882,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 하단 널찍한 상세 수업 스케줄
+    # [KST 당일 한정 출석체크 및 초기화(취소) 연동]
     sel_date_str = st.session_state["dash_selected_date"]
     st.markdown('<div class="pt-card" style="border-top: 4px solid #2563EB;">', unsafe_allow_html=True)
     st.markdown(f"#### 📌 **{sel_date_str}** 상세 수업 스케줄")
@@ -874,6 +898,9 @@ def page_dashboard(members, logs, sales, reports, bookings):
             st.info(f"{sel_date_str}에 예정된 수업 예약이 없습니다.")
         else:
             st.success(f"총 **{len(merged_day_b)}개**의 수업이 예약되어 있습니다.")
+
+            # KST 당일 여부 검증
+            is_today_kst = (sel_date_str == today_str)
 
             for idx, b_row in merged_day_b.sort_values("time_slot").iterrows():
                 s_time = str(b_row.get("time_slot") or "10:00").strip()
@@ -912,16 +939,24 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 </div>
                 """, unsafe_allow_html=True)
 
-                btn_c1, btn_c2, _ = st.columns([1, 1, 4])
-                if btn_c1.button("🟢 출석 완료", key=f"dash_att_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
-                    update_attendance_log(m_id, sel_date_str, s_time, e_time, "출석")
-                    st.toast(f"🎉 {m_name} 회원 ({s_time}) 출석 처리 완료")
-                    rerun()
+                if is_today_kst:
+                    btn_c1, btn_c2, btn_c3, _ = st.columns([1, 1, 1, 3])
+                    if btn_c1.button("🟢 출석 (-1회)", key=f"dash_att_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
+                        update_attendance_log_and_session(m_id, sel_date_str, s_time, e_time, "출석")
+                        st.toast(f"🎉 {m_name} 회원 출석 처리 완료 (잔여 세션 -1 차감)")
+                        rerun()
 
-                if btn_c2.button("🔴 결석/노쇼", key=f"dash_abs_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
-                    update_attendance_log(m_id, sel_date_str, s_time, e_time, "결석")
-                    st.toast(f"🔴 {m_name} 회원 ({s_time}) 노쇼/결석 처리 완료")
-                    rerun()
+                    if btn_c2.button("🔴 결석/노쇼 (-1회)", key=f"dash_abs_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
+                        update_attendance_log_and_session(m_id, sel_date_str, s_time, e_time, "결석")
+                        st.toast(f"🔴 {m_name} 회원 노쇼/결석 처리 완료 (잔여 세션 -1 차감)")
+                        rerun()
+
+                    if btn_c3.button("🔄 출결 초기화", key=f"dash_reset_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
+                        update_attendance_log_and_session(m_id, sel_date_str, s_time, e_time, "미체크")
+                        st.toast(f"🔄 {m_name} 회원 출결 초기화 완료 (잔여 세션 +1 복구)")
+                        rerun()
+                else:
+                    st.caption("🔒 출석체크는 당일에만 진행할 수 있습니다.")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -951,7 +986,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (대형 달력 레이아웃 적용)
+# 5. 페이지: 수업 등록
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
@@ -1321,7 +1356,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서
+# 7. 페이지: AI 내 몸 변화 설계서 (수정/작성 클릭 시 자동 스크롤 연동)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1411,7 +1446,7 @@ def page_bodyplan(members, reports):
 
         components.html(preview_html, height=850, scrolling=True)
 
-    # 개별 회원 설계서 작성 폼
+    # [수정] 개별 회원 설계서 작성 폼 (작성하기 클릭 시 해당 위치로 자동 스크롤 이동)
     if st.session_state.get("editing_member_id"):
         e_id = int(st.session_state.get("editing_member_id"))
         selected_m = members[pd.to_numeric(members["member_id"], errors="coerce") == e_id].iloc[0]
@@ -1420,6 +1455,10 @@ def page_bodyplan(members, reports):
         r_row = target_r.iloc[0] if has_existing else {}
 
         st.markdown("---")
+        # 스크롤 앵커 태그 및 자바스크립트 스크롤 커스텀 스크립트 실행
+        st.markdown("<div id='report-editor-anchor'></div>", unsafe_allow_html=True)
+        components.html("<script>var el = window.parent.document.getElementById('report-editor-anchor'); if (el) { el.scrollIntoView({behavior: 'smooth'}); }</script>", height=0)
+
         st.subheader(f"💡 '{selected_m['name']}' 회원 맞춤 전문 가이드 생성 및 작성")
 
         st.markdown('<div class="pt-card">', unsafe_allow_html=True)
@@ -1446,7 +1485,6 @@ def page_bodyplan(members, reports):
             key=f"input_func_{e_id}"
         )
 
-        # AI 전문 톤앤매너 정제 생성 버튼
         if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
             refined_goal = refine_raw_text(goal_input)
             refined_journal = refine_raw_text(raw_journal)
@@ -1644,7 +1682,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (PK 중복 절대 없는 안전한 매출 저장 적용)
+# 9. 페이지: 회원 관리
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1703,7 +1741,6 @@ def page_members(members, sales, bookings, logs, reports):
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         save_members(members)
 
-                        # [수정 원인 1 해결] Supabase DB 최신 sale_id 최댓값을 독립 계산해 PK 중복 저지를 원천 차단
                         db_sales = load_sales()
                         new_s_id = next_id(db_sales, "sale_id")
 
@@ -1719,7 +1756,7 @@ def page_members(members, sales, bookings, logs, reports):
                         save_sales(updated_sales)
 
                         st.session_state["show_reg_modal"] = False
-                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되고 매출({amount:,.0f}원)이 계상되었습니다.")
+                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되고 결제 매출({amount:,.0f}원)이 계상되었습니다.")
                         rerun()
 
     tab1, tab2 = st.tabs(["📋 회원 세션 관리 & 메모/사전설문", "💰 월별 매출 통합 분석"])
